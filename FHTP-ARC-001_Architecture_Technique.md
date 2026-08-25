@@ -1,10 +1,10 @@
 # FHTP-ARC-001 -- Architecture Technique
 ## FITTER Health Trust Platform
 
-**Version 0.5**  
-**Date :** 6 juillet 2026  
-**Statut :** Brouillon pour validation par Dr Amadou  
-**Documents de reference :** FHTP-KNO-001 v0.16, FHTP-PRD-001 v1.4, FHTP-PRD-002 v1.4, FHTP-PRD-003 v1.3, FHTP-REF-001 v1.2
+**Version 0.6 -- Document maitre consolide (fusion des addenda 1 a 9)**  
+**Date :** 9 juillet 2026  
+**Statut :** Version de reference -- integre l'ensemble des addenda valides par Dr Amadou entre le 7 et le 9 juillet 2026  
+**Documents de reference :** FHTP-KNO-001 v0.22, FHTP-PRD-001 v1.5, FHTP-PRD-002 v1.5, FHTP-PRD-003 v1.4, FHTP-REF-001 v1.3
 
 ---
 
@@ -88,7 +88,7 @@ Le moteur de regles evalue chaque dossier soumis en appliquant sequentiellement 
 | # | Pilier | Portee |
 |---|---|---|
 | 1 | **Completude administrative** | Presence de toutes les pieces obligatoires (codes, dates, signatures, recu ticket moderateur, PEC). |
-| 2 | **Coherence de regime** | Circuit de remboursement correct (majoration AMU interdite, oral clinique privee, AMU Scolaire). |
+| 2 | **Coherence de regime** | Circuit de remboursement correct (majoration AMU interdite, oral clinique privee, AMU Scolaire). Inclut la verification des exclusions de contrat (`Exclusion_Contrat`, section 6), y compris par categorie de beneficiaire -- corrige une premiere version qui classait cette verification sous le pilier 4 (voir note en section 10). |
 | 3 | **Coherence tarifaire** | Tarifs conformes (Presta+, bareme AMU Scolaire, lettre-cle CAT). |
 | 4 | **Coherence documentaire** | Diagnostic CIM-10 valide (hors R68), cloture ///, correspondance actes/rapport. |
 | 5 | **Coherence prescripteur/acte** | Habilitation du prescripteur, restrictions paramedicals, rattachement a l'etablissement. |
@@ -421,7 +421,102 @@ Contestation_Recours
   -- d'un connecteur AMU (INAM/CNSS) ; le mecanisme CAT (charte du
   -- medecin-conseil, FHTP-REF-001 Partie 2.9) suit un circuit distinct
   -- a modeliser separement si necessaire.
+
+Exclusion_Contrat
+  id_exclusion
+  id_contrat_payeur (FK)
+  categorie_beneficiaire (nullable) : [CADRE | EXECUTANT | AUTRE]
+    -- vide = s'applique a toute la police ; renseigne = ne s'applique
+    -- qu'a cette categorie (ex : exclusion valable seulement au niveau
+    -- executant d'un contrat d'entreprise donne).
+  type_exclusion : [ACTE | MEDICAMENT | CATEGORIE_ACTE | PATHOLOGIE_PREEXISTANTE]
+  code_ou_categorie (code acte/DCI precis, ou categorie large -- ex : "actes esthetiques")
+  motif (texte libre)
+  date_version
+  -- Entite separee plutot qu'un champ sur Contrat_Payeur : un contrat peut
+  -- porter plusieurs dizaines d'exclusions a des niveaux differents.
+  -- Cf. section 10, note sur le pilier 2 -- une exclusion de police est une
+  -- question de couverture contractuelle, pas un probleme documentaire.
+  -- Risque R8 associe : FHTP-KNO-001, section 12 (registre des risques).
+
+Cle_Licence
+  id_licence
+  id_formation (FK)
+  type_contrat : [ANNUEL | TRIMESTRIEL]
+  modele_tarifaire : [FORFAIT | FORFAIT_PLUS_VOLUME]
+  date_debut
+  date_expiration
+  statut : [ACTIVE | GRACE | DEGRADEE | SUSPENDUE]
+  derniere_verification_en_ligne (horodatage du dernier contact externe reussi)
+  jeton_signe (jeton signe par FHTP, verifiable localement sans appel reseau)
+  -- Cf. section 12.5. Meme mecanisme d'ancrage externe que le Journal de
+  -- Conformite (section 8.5), reutilise ici comme anti-triche sur l'horloge.
+
+Referentiel_Libelle
+  id_libelle (ex : MSG-R-TG-017-REJET)
+  locale : [fr | en | ar | pt | es]
+  texte
+  version
+  -- Separe le texte affiche (par langue) de la logique des regles, qui
+  -- continue de raisonner en identifiants (rule_id), jamais en texte.
+  -- Cf. section 13.
+
+Lot_Soumission
+  id_lot
+  id_formation (FK)
+  periode_couverte (ex : 2026-06)
+  date_soumission
+  format_source : [JSON | CSV | EXCEL | XML | PDF]
+  canal : [API | PORTAIL_UPLOAD]
+  nombre_dossiers_detectes
+  statut_lot : [RECU | EN_TRAITEMENT | TRAITE_PARTIEL | TRAITE_COMPLET]
+  -- Cf. section 14. Regroupe les dossiers soumis en fin de mois par un
+  -- centre qui facture avec son propre logiciel plutot qu'au fil de l'eau.
+
+Profil_Import_Centre
+  id_profil
+  id_formation (FK)
+  format_source : [CSV | EXCEL | PDF]
+  mapping_colonnes (association colonne du fichier du centre -> champ du
+                     modele generique de Dossier)
+  date_configuration
+  configure_par : [EQUIPE_FHTP | CENTRE]
+  -- Cf. section 14.7. FHTP s'adapte au format deja utilise par le centre,
+  -- plutot que d'imposer un format unique -- meme logique que les
+  -- connecteurs terrain (FHTP-KNO-001 section 3.5).
+
+Modele_Payeur_Socle
+  id_payeur_connecteur (FK, une entree par payeur)
+  mentions_communes (en-tete, cachet, signature du medecin-conseil)
+  date_version
+
+Modele_Document_Payeur
+  id_modele
+  id_payeur_connecteur (FK)
+  type_acte : [HOSPITALISATION | ANALYSE_BIOLOGIQUE | IMAGERIE | PHARMACIE_TPC | KINESITHERAPIE | LUNETTERIE | AUTRE]
+  type_document : [PEC_STANDARD | PEC_URGENCE | TPC | AUTRE]
+  mentions_specifiques (propre a ce type d'acte)
+  date_version
+  source
+  variante_centre (nullable, FK vers Formation_Sanitaire -- vide par defaut,
+                    ne sert que si une exception reelle est un jour constatee)
+  -- Cf. section 15.3. Utilise pour le rapprochement structurel d'un scan de
+  -- PEC quand le connecteur payeur est injoignable -- un filtre de
+  -- coherence, jamais une preuve cryptographique ni un substitut a la
+  -- verification en ligne (cf. F7, section 8.2).
 ```
+
+**Champs ajoutes sur des entites deja definies ci-dessus :**
+
+| Entite | Champ ajoute | Role |
+|---|---|---|
+| `Dossier` | `id_lot` (nullable) | Rattache un dossier a un lot s'il a ete soumis en groupe (section 14) |
+| `Formation_Sanitaire` | `locale_rapport_preferee` (nullable) | Langue des rapports, independante du payeur (section 13.4) |
+| `Beneficiaire` | `categorie_contrat` (nullable) : [CADRE \| EXECUTANT \| AUTRE] | Renseigne uniquement quand le contrat distingue des niveaux de couverture (section 10, pilier 2) |
+| `PEC_Entente_Prealable` | `scan_hash` (nullable) | Trace le document scanne fourni en l'absence de connexion payeur (section 15.2) |
+| `PEC_Entente_Prealable` | statut, ajout de `EN_ATTENTE_VERIFICATION_SCAN` | Plafonne l'usage d'un scan non encore reconfirme en ligne (section 15.4) |
+
+Un nouveau statut de dossier existe egalement hors de ce tableau : `EN_ATTENTE_CONFIRMATION_OCR` (section 14.8), pour les dossiers issus d'une reconnaissance de PDF scanne en attente de confirmation humaine.
 
 ---
 
@@ -508,6 +603,37 @@ Chaque document numerise (ordonnance, feuille de soins, PEC) est hashe **au mome
 **Integrite du Log_Audit (F2) :** chainage cryptographique interne (obligatoire, cout nul) **complete par un ancrage externe periodique via un service de preuve d'existence public et gratuit (type OpenTimestamps)**. Ce choix est retenu specifiquement parce qu'il offre une preuve d'anteriorite verifiable par un tiers exterieur au systeme, sans necessiter d'infrastructure dediee ni de cout recurrent -- un point important pour un projet a ce stade de financement, tout en repondant au risque de pression institutionnelle sur un environnement politise (FHTP-PRD-001 section 9.1).
 
 **Reste a definir techniquement lors du developpement :** frequence exacte de l'ancrage externe (ex. quotidien ou hebdomadaire) et modalites precises de rotation des secrets de connecteurs, une fois les partenariats INAM/CNSS/CAT formalises.
+
+### 8.6 Modele de menace structure (STRIDE)
+
+La table de failles ci-dessus (F1-F7) couvre bien la plupart des categories STRIDE, mais de facon dispersee. Ce tableau les reclasse, et ajoute deux failles qui n'etaient pas encore couvertes explicitement.
+
+| Categorie STRIDE | Couvert par | Nouvelle faille identifiee |
+|---|---|---|
+| **Spoofing** (usurpation) | F4 (RBAC), F5 (secrets scopes par centre) | **F8** -- rien n'empechait qu'un Agent (section 17.3) falsifie se fasse passer pour l'agent legitime d'un centre. Mitigation retenue : authentification mutuelle (mTLS ou certificat client par agent), pas seulement un jeton applicatif. |
+| **Tampering** (alteration) | F1 (hash a l'ancrage), F2 (chainage du Journal de Conformite) | **F9** -- sur le profil Instance Locale (section 17.4), un administrateur local avec acces direct a la base pourrait alterer le cache local des referentiels ou des regles, pas seulement le Journal de Conformite. Mitigation retenue : les referentiels et regles telecharges localement portent aussi une signature verifiee a reception, comme les documents de la section 8.4 -- une modification locale invalide la signature et declenche un retour au mode degrade strict. |
+| **Repudiation** (repudiation) | F2 (chainage + ancrage externe) | -- |
+| **Information Disclosure** (divulgation) | Privacy by Design (8.1) -- aucun contenu medical stocke | -- |
+| **Denial of Service** | F6 (rate limiting, disjoncteur par connecteur) | Renforce par la limitation de frequence differenciee posee pour la soumission groupee (section 12.8) -- un lot anormalement volumineux reste absorbe sans bloquer les autres centres. |
+| **Elevation of Privilege** (elevation de privilege) | F4 (RBAC par role reel) | -- |
+
+### 8.7 Politique de retention et de suppression des donnees
+
+FHTP ne stocke jamais le contenu medical brut (8.1) -- la question de retention porte donc sur les metadonnees de facturation, les hash d'integrite, et le Journal de Conformite.
+
+- **Duree de conservation de l'audit :** a confirmer juridiquement avec Dr Amadou -- la duree doit s'aligner sur le delai de prescription applicable aux litiges de remboursement au Togo, pas sur une duree arbitraire. Point explicitement laisse ouvert plutot que de fixer un chiffre sans base reglementaire.
+- **Fin de contrat d'un centre :** les metadonnees et rapports du centre lui appartiennent et restent exportables sur demande (coherent avec l'acces en lecture toujours garanti meme en licence suspendue, section 12.6). Les donnees agregees et anonymisees utiles a la detection de schemas de fraude au niveau du projet peuvent etre conservees au-dela -- a condition que l'anonymisation soit reelle, pas seulement declarative.
+- **Droit a l'oubli d'un beneficiaire :** FHTP ne detenant pas le contenu medical, l'essentiel de la demande d'un patient renvoie vers l'etablissement qui, lui, detient le dossier -- coherent avec le principe deja pose en 8.1.
+
+### 8.8 Plan de reponse a incident, en cas de compromission reelle
+
+Le Journal de Conformite chaine et ancre (F2) devient l'outil central d'investigation, pas seulement un registre passif :
+
+1. **Detection** : alerte automatique sur rupture de chaine du Journal, echec de signature d'un referentiel local (F9), ou volume anormal detecte par le rate limiting (F6/8.6).
+2. **Confinement** : revocation immediate du jeton compromis (scope limite par centre, F5), rotation des secrets du connecteur concerne.
+3. **Notification** : centre concerne, puis payeur si des dossiers de ce centre ont transite vers lui pendant la fenetre de compromission suspectee.
+4. **Investigation** : reconstruction de la portee exacte a partir du Journal de Conformite chaine -- c'est precisement ce que l'ancrage externe (section 8.5) est cense permettre de prouver de facon opposable.
+5. **Remediation et retour d'experience** : nouvelle entree dans le registre des risques (FHTP-KNO-001, section 12), pas seulement une correction technique isolee.
 
 ---
 
@@ -917,6 +1043,8 @@ flowchart LR
 
 ---
 
+**Note de correction (9 juillet 2026) sur les trois circuits CAT ci-dessous (10.4-10.6) :** la verification des exclusions de police, mentionnee dans chacun des piliers 4 de ces circuits, doit en realite etre evaluee au **pilier 2 (coherence de regime)**, via l'entite `Exclusion_Contrat` (section 6), pas au pilier 4 (documentaire). Une exclusion de police est une question de couverture contractuelle -- au meme titre que les majorations interdites en AMU ou les molecules orales exclues en clinique privee, deja classees au pilier 2 -- pas un probleme de piece manquante. La distinction compte : les deux natures de rejet ouvrent des voies de recours differentes. La verification doit croiser le `Contrat_Payeur` du beneficiaire **et**, si elle est renseignee, sa `categorie_beneficiaire` (CADRE/EXECUTANT/AUTRE) -- une exclusion au niveau police s'applique a tous les beneficiaires du contrat, une exclusion au niveau categorie ne s'applique qu'a cette categorie precise. Les diagrammes ci-dessous n'ont pas ete redessines pour eviter d'alourdir le document ; retenir cette correction de placement en les lisant.
+
 ### 10.4 CAT -- Circuit Consultation (Assurance Privee)
 
 **Acteurs :** Assure (apporte carte assurance), Prestataire, FHTP Core, Connecteur CAT, Connecteur INAM (coordination si double regime)
@@ -1279,11 +1407,682 @@ flowchart LR
 | Q2 | Quel est le format exact des fichiers Excel INAM telechargeables (colonnes, frequence de mise a jour) ? | Module d'import du Referentiel | Haute |
 | Q3 | Le Connecteur CNSS partage-t-il la meme API que l'INAM, ou a-t-il des endpoints distincts ? | Nombre de connecteurs a developper | Moyenne |
 | Q4 | Quels logiciels de pharmacie sont les plus presents au Togo ? Proposent-ils des APIs d'integration ? | Design du Connecteur Officine | Moyenne |
-| Q5 | Le module de saisie minimale doit-il fonctionner entierement hors-ligne (PWA mobile) ? | Architecture front-end du module | Moyenne |
+| Q5 | ~~Le module de saisie minimale doit-il fonctionner entierement hors-ligne (PWA mobile) ?~~ | Architecture front-end du module | **Tranchee, 9 juillet 2026** -- PWA retenue pour l'ensemble du Profil Portail, y compris mobile (section 16.2). Hors-ligne complet non requis : le mode degrade (section 7) couvre deja la continuite en cas de coupure. |
 
 ---
 
-## 12. Journal des versions
+## 12. API FHTP Core -- exposition directe
+
+### 12.1 Ce que cette section couvre, et ce qu'elle ne couvre pas
+
+La section 3 decrit des connecteurs : la facon dont FHTP Core parle aux payeurs (INAM, CNSS, CAT) et au terrain (SIH, officine). Ce sont des interfaces que FHTP initie ou consomme selon un role defini a l'avance.
+
+Cette section decrit l'inverse : comment un systeme externe -- logiciel de facturation d'un cabinet, tableur, portail web du module de saisie minimale -- appelle FHTP Core directement pour lui demander une validation. Ce n'est pas un connecteur au sens de la section 3 : c'est la porte d'entree generale de FHTP Core, celle que tout le monde utilise, y compris un centre qui n'a jamais entendu parler d'un SIH.
+
+### 12.2 Deux modes de consommation
+
+| Mode | Utilise par | Caracteristique |
+|---|---|---|
+| **Connecteur Terrain integre** (section 3.2/5, deja valide) | SIH, logiciel d'officine, embarque dans le poste de travail existant | Temps reel, dossier par dossier, transparent pour l'utilisateur final |
+| **API Directe FHTP Core** (nouvelle, cette section) | N'importe quel logiciel de facturation, y compris un tableur exporte | Un dossier a la fois, ou un lot entier (section 14) ; le centre decide du rythme |
+
+Le deuxieme mode existe precisement parce que tous les centres n'ont pas de SIH, et que ceux qui en ont un n'utilisent pas forcement l'integration en temps reel -- cf. section 14.
+
+### 12.3 Points d'entree principaux (illustratif, a figer avec Dr Amadou)
+
+```
+POST   /api/v1/dossiers            Soumettre un dossier unique. Reponse synchrone.
+GET    /api/v1/dossiers/{id}       Consulter le statut d'un dossier.
+POST   /api/v1/lots                Soumettre un lot de dossiers. Reponse asynchrone (section 14).
+GET    /api/v1/lots/{id}           Statut global d'un lot.
+GET    /api/v1/lots/{id}/rapport   Rapport detaille du lot, une entree par dossier.
+GET    /api/v1/referentiels/{type} Lecture seule des referentiels (tarifs, medicaments, actes).
+```
+
+**Reponse d'un dossier unique (`POST /api/v1/dossiers`) :**
+
+```json
+{
+  "dossier_id": "DOS-2026-004521",
+  "decision_finale": "CONTROLE_RAPIDE",
+  "piliers": {
+    "completude_administrative": "CONFORME",
+    "coherence_regime": "CONFORME",
+    "coherence_tarifaire": "A_VERIFIER",
+    "coherence_documentaire": "CONFORME",
+    "coherence_prescripteur": "CONFORME",
+    "coherence_graphique": "NON_EVALUE"
+  },
+  "motifs": ["R-TG-005: montant facture superieur a la base Presta+"],
+  "alerte_recours": null,
+  "locale": "fr"
+}
+```
+
+Le format de sortie est identique quel que soit le mode d'entree : dossier saisi a la main via le portail, importe depuis un fichier Excel, ou soumis par API JSON depuis un SIH tiers. Le moteur de regles ne voit jamais le format d'origine -- seulement le modele de donnees consolide (section 6). Meme logique que celle deja retenue pour les connecteurs payeurs : un contrat generique, plusieurs implementations d'entree.
+
+### 12.4 Authentification et portee d'acces
+
+Chaque centre dispose d'un jeton propre (OAuth2 client credentials, cf. section 8.3), scope limite a ses propres dossiers, conformement au principe deja retenu en F5 et F4 (section 8.2). Un centre ne peut jamais interroger ou soumettre au nom d'un autre, meme par erreur d'integration cote client.
+
+### 12.5 Modele de licence et cycle de vie de la cle d'acces
+
+Rappel de Dr Amadou, 9 juillet 2026 : FHTP a vocation a generer un revenu. L'acces a l'API -- soumission unitaire comme soumission groupee -- est donc conditionne a une cle valable pour une duree contractuelle definie, a renouveler a l'echeance. Ce principe s'applique **meme si FHTP est installe localement chez le centre**, pas seulement en usage cloud : ce n'est jamais l'emplacement du serveur qui garantit un acces illimite, c'est le contrat.
+
+Nouvelle entite `Cle_Licence` : voir section 6.
+
+**Principe central : la verification ne depend pas d'un appel reseau a chaque requete.** Chaque appel a l'API presente le jeton signe. FHTP Core -- qu'il tourne dans le cloud ou deploye localement chez un grand centre -- verifie la signature et compare la date d'expiration a son horloge, sans "telephone maison" systematique. Une dependance reseau sur une fonction commerciale n'a pas a fragiliser la disponibilite d'une fonction qui, elle, touche a la validation des soins -- la realite de connectivite deja documentee en section 7 s'applique aussi ici.
+
+**Contre la triche sur l'horloge locale :** un jeton non expire sur une horloge deliberement reculee resterait un probleme. Solution retenue : reutiliser le mecanisme d'ancrage externe deja choisi pour l'integrite du Journal de Conformite (section 8.5, ancrage periodique type OpenTimestamps). Chaque contact externe reussi rafraichit `derniere_verification_en_ligne`. Si ce delai depasse un seuil (a caler sur les memes ordres de grandeur que la fraicheur des referentiels deja retenue en section 8.5), FHTP Core cesse de faire confiance a sa propre horloge pour la licence -- independamment de ce que le jeton affiche -- et bascule directement en statut DEGRADEE (12.6). Une seule mecanique d'ancrage sert donc deux besoins distincts : l'integrite de l'audit, et l'anti-fraude sur la duree de licence.
+
+### 12.6 Degradation progressive plutot que coupure seche
+
+Objectif : ne jamais couper un centre du jour au lendemain pour un simple retard administratif de renouvellement -- realite deja documentee par ailleurs pour les delais de paiement AMU, qui depassent parfois 3 mois -- sans pour autant laisser un acces expire fonctionner indefiniment sans consequence.
+
+| Phase | Declencheur | Comportement |
+|---|---|---|
+| **Alerte de renouvellement** | J-30, J-15, J-7, J-1 avant expiration | Service inchange. Chaque reponse API porte un indicateur de renouvellement a prevoir. |
+| **Grace** | J+0 a J+15 apres expiration | Soumission unitaire inchangee. Soumission groupee toujours active, mais chaque rapport de lot porte un bandeau explicite de licence expiree. |
+| **Degradee** | J+15 a J+60 apres expiration | Soumission unitaire toujours active -- un centre ne doit jamais perdre sa capacite de validation courante du jour au lendemain, ce service touche a la relation de confiance avec les payeurs. Soumission groupee suspendue (`POST /api/v1/lots` renvoie 402). Lecture de l'historique et des rapports deja produits toujours garantie. |
+| **Suspendue** | Au-dela de J+60 | Toute nouvelle soumission refusee (402), unitaire comme groupee. Lecture de l'historique toujours garantie -- un centre garde l'acces a ses propres donnees d'audit quoi qu'il arrive, c'est sa donnee de conformite, pas un levier de negociation commerciale. |
+
+Ce sequencement protege le revenu sans reproduire, cote FHTP lui-meme, la logique de coupure seche que le projet cherche justement a corriger cote relation prestataire-payeur (FHTP-KNO-001, "le vrai probleme a resoudre : la crise de confiance").
+
+**Valide par Dr Amadou, 9 juillet 2026 :** le seuil de 60 jours avant suspension complete est juge raisonnable, dans la meme logique qu'un preavis de rupture de contrat plutot qu'une coupure immediate -- coherent avec l'esprit d'aide maximale que le projet cherche a porter, y compris dans sa propre relation commerciale avec les centres.
+
+### 12.7 Codes d'erreur
+
+Distinction a poser clairement d'abord : une decision du moteur de regles (REJET, AUDIT_APPROFONDI, CONTROLE_RAPIDE...) n'est **jamais** une erreur API. C'est une reponse HTTP 200 tout a fait normale, avec un `decision_finale` simplement defavorable. Un code d'erreur ne concerne que l'acces a l'API elle-meme -- technique ou contractuel -- jamais le contenu metier du dossier.
+
+| Code | Signification | Cas d'usage |
+|---|---|---|
+| 401 | Non authentifie | Jeton absent ou signature invalide |
+| **402** | Paiement requis | Licence expiree au-dela de la periode de grace (12.6) -- reutilisation volontaire d'un code HTTP existant mais rarement exploite, exactement pour l'usage auquel il est nomme |
+| 403 | Acces refuse | Jeton valide mais scope insuffisant (ex : contrat ne couvrant pas la soumission groupee) |
+| 422 | Dossier mal forme | Champ obligatoire absent, date invalide -- distinct du `REJET_FORMAT` interne a un lot (section 14.3), qui reste une reponse 200 par dossier |
+| 429 | Trop de requetes | Limite de frequence depassee (12.8), avec en-tete `Retry-After` |
+
+### 12.8 Limitation de frequence
+
+Deux echelles, pas la meme logique selon le mode :
+
+- **Soumission unitaire (temps reel)** : quota genereux par minute, pense pour ne jamais gener un flux de consultation normal. Sert surtout a reperer un script ou une integration mal configuree, pas a freiner un usage reel.
+- **Soumission groupee (lot)** : quota pense en nombre de lots par periode plutot qu'en requetes brutes, puisque l'usage attendu est d'environ un lot par mois et par centre (section 14.1). Un volume de lots nettement superieur a ce qui est attendu declenche un 429 dont le message distingue deux cas : depassement technique temporaire, ou depassement du volume prevu par le palier tarifaire souscrit -- dans ce second cas, le message oriente vers un palier superieur plutot que de se limiter a un refus sec.
+
+**Cas particulier du mode degrade reseau (section 7) :** un centre qui a accumule plusieurs soumissions hors ligne ne doit jamais etre bloque retroactivement au moment de la reconnexion a cause d'un quota -- les compteurs s'appliquent a la reception, pas a la creation. Un volume anormalement eleve au moment de la resynchronisation est signale pour revue humaine plutot que rejete automatiquement, dans le meme esprit que le reste du dispositif anti-fraude deja retenu (section 8.2).
+
+### 12.9 Remarque commerciale, hors architecture
+
+Une piste de tarification a discuter avec Dr Amadou, au-dela du cadre technique de cette section : un modele hybride plutot qu'un forfait unique -- base fixe modeste (infrastructure, support) plus une part variable liee au volume de dossiers valides, pour qu'un petit cabinet et un CHR paient proportionnellement a leur usage reel plutot qu'un tarif identique. Une option trimestrielle, en plus de l'annuel, reduirait la barriere d'entree pour les structures dont la tresorerie est plus tendue -- coherent avec les delais de paiement deja documentes dans le secteur. Ce point reste une hypothese commerciale a valider, pas une decision d'architecture.
+
+---
+
+## 13. Internationalisation et multilinguisme
+
+### 13.1 Ce qui reste inchange
+
+Le moteur de regles raisonne deja en codes, pas en texte : conditions, identifiants de regles, statuts de pilier sont des valeurs machine (`R-TG-017`, `ANOMALIE`, `CIM-10`). Cette partie-la n'a besoin d'aucune adaptation pour etre multilingue -- c'est un acquis de l'architecture actuelle, pas un chantier.
+
+Ce qui doit changer, c'est uniquement la couche de texte destinee a un humain : le message d'un rejet, le libelle d'un acte, le nom d'un statut affiche a l'ecran.
+
+### 13.2 Referentiel de libelles (nouvelle entite)
+
+Aujourd'hui, une regle porte directement son message en francais dans le champ `message` (section 2.1). Ce champ doit etre remplace par une reference a un identifiant de message, resolu au moment de la reponse selon la langue demandee.
+
+```json
+{
+  "id": "R-TG-017",
+  "condition": "dossier.diagnostic_cim10 == 'R68'",
+  "action_si_vrai": "REJET",
+  "message_id": "MSG-R-TG-017-REJET"
+}
+```
+
+Nouvelle entite `Referentiel_Libelle` : voir section 6.
+
+```
+MSG-R-TG-017-REJET | fr | "Code R68 proscrit par l'INAM. Dossier rejete d'office."
+MSG-R-TG-017-REJET | en | "Code R68 is prohibited by INAM. File automatically rejected."
+```
+
+Meme logique de versionnage que le Referentiel de Regles (section 2.5) : un changement de formulation se fait par nouvelle version du libelle, pas par ecrasement, pour garder une trace de ce qui a ete affiche a quelle date.
+
+Les libelles des referentiels medicaments et actes (nomenclature Presta+, lettre-cle CAT) suivent le meme principe : le code reste international et non traduit, seul son intitule affiche change de langue.
+
+### 13.3 Resolution de la langue
+
+Ordre de priorite :
+1. Parametre explicite de la requete API (`Accept-Language` ou equivalent).
+2. Langue par defaut du connecteur payeur concerne -- un connecteur Togo (INAM/CNSS/CAT) repond en francais par defaut ; un futur connecteur Ghana repondrait en anglais par defaut, sans qu'aucune regle metier n'ait besoin d'etre dupliquee pour autant.
+3. Francais, a defaut de tout le reste -- langue de reference actuelle du projet.
+
+### 13.4 Portee retenue
+
+Francais et anglais restent la base : le francais pour le Togo, l'anglais pour le futur connecteur Ghana et pour les lecteurs de rapports cote bailleurs internationaux.
+
+**Ajout du 9 juillet 2026, sur demande de Dr Amadou :** deux langues supplementaires pour la portabilite regionale, plus une troisieme pour un cas d'usage different.
+
+- **Portugais** -- pertinent pour une extension vers la Guinee-Bissau ou le Cap-Vert, meme logique de portabilite deja retenue pour le Niger et le Burkina Faso (FHTP-KNO-001 section 3.4).
+- **Espagnol** -- pertinent pour la Guinee equatoriale, seul pays hispanophone de la sous-region.
+- **Arabe** -- cas d'usage distinct des deux precedents : il ne s'agit pas d'un pays candidat a un futur connecteur payeur, mais d'un besoin deja present au Togo. Confirme par Dr Amadou : certaines ONG islamiques gerant des orphelinats et des structures de soins associees echangent avec leurs partenaires internationaux en arabe. Ces structures peuvent tres bien soumettre leurs dossiers a l'INAM ou la CNSS en francais (le circuit payeur ne change pas), tout en ayant besoin que leurs propres rapports de suivi soient lisibles en arabe par leurs partenaires.
+
+**Consequence de conception :** la langue d'un rapport ne peut plus dependre uniquement du connecteur payeur par defaut (13.3, priorite 2). Nouveau champ `locale_rapport_preferee` sur `Formation_Sanitaire` (section 6), independant du payeur auquel elle soumet ses dossiers. Un meme dossier peut ainsi etre soumis en francais a l'INAM tout en produisant, a la demande, une copie de rapport en arabe pour l'usage interne de la structure -- sans dupliquer la logique de validation, seule la couche de restitution change.
+
+**Point d'attention technique, arabe uniquement :** l'arabe s'ecrit de droite a gauche. Ca ne concerne pas le Referentiel de Libelles (le stockage de texte ne change pas), mais le moteur de rendu des rapports (section 14.3) doit savoir produire une mise en page RTL correcte, pas seulement traduire les mots. A verifier lors du choix de l'outil de generation PDF.
+
+**Ce qui reste hors perimetre pour l'instant :** les langues togolaises locales (ewe, kabye) -- aucun besoin exprime, personnel de terrain operant en francais.
+
+### 13.5 Ce qui ne se traduit jamais
+
+Le Journal de Conformite (section 2.4) continue d'enregistrer des `rule_id`, pas du texte. C'est deja une bonne propriete de l'architecture actuelle : un audit reste exploitable independamment de la langue d'affichage du moment, et un changement de libelle futur ne reecrit jamais l'historique.
+
+---
+
+## 14. Soumission groupee (batch) -- fin de mois, logiciel de facturation tiers
+
+### 14.1 Constat de terrain
+
+Confirme par Dr Amadou, 7 juillet 2026 : sur le terrain togolais, un centre qui dispose deja de FHTP mais facture avec son propre logiciel (ou un tableur, cf. l'observation deja notee au CHR Dapaong, FHTP-KNO-001 section 6.1) ne soumet en general pas ses dossiers un par un au fil des consultations. Il accumule les factures du mois, puis, a l'approche de l'echeance reglementaire du 5 du mois suivant (R-TG-002), les compile et les transmet toutes ensemble.
+
+FHTP doit traiter ce mode comme un chemin normal, au meme titre que le flux temps reel deja decrit en section 10 -- pas comme un contournement a tolerer.
+
+### 14.2 Nouvelle entite : Lot_Soumission
+
+Voir section 6 pour la structure complete.
+
+**Ajout du 9 juillet 2026, sur demande de Dr Amadou : le format PDF.** Deux cas tres differents se cachent derriere ce meme format, a ne pas confondre :
+
+1. **Export PDF structure** -- un logiciel de facturation produit un PDF qui reste, sous le capot, un tableau (lignes/colonnes identifiables). Extraction directe possible, proche du traitement d'un CSV.
+2. **Compilation scannee de feuilles de soins physiques** -- le cas le plus courant pour les cabinets sans logiciel : un lot de feuillets papier scannes en un seul PDF. La, il n'y a pas de tableau a extraire, mais un ensemble de documents a reconnaitre un par un, par OCR, avant de pouvoir les faire entrer dans le modele generique de Dossier.
+
+Le deuxieme cas est nettement plus lourd que l'ajout d'un simple parseur de fichier : il demande un sous-module de reconnaissance de document (decoupage du PDF en dossiers individuels, OCR par feuillet, extraction des champs obligatoires -- code formation, code prescripteur, montants). C'est un chantier a part entiere, pas une variante mineure du CSV/Excel deja prevu. Retenu comme composant a specifier separement, pas encore detaille ici.
+
+Ajout sur `Dossier` (section 6) : un champ `id_lot` (nullable). Un dossier soumis en temps reel n'a pas de lot ; un dossier soumis en fin de mois en a un. Le reste du modele ne change pas.
+
+### 14.3 Deroule
+
+1. Le centre exporte ses factures du mois depuis son propre logiciel, ou les compile manuellement dans un tableur -- c'est la realite deja documentee, FHTP s'y adapte plutot que d'imposer un format neuf.
+2. Soumission via `POST /api/v1/lots` (fichier Excel/CSV en piece jointe, ou tableau JSON), ou par glisser-depose sur le portail web pour les centres sans capacite d'integration technique.
+3. FHTP Core accuse reception immediatement : `id_lot` et nombre de lignes detectees. Le traitement complet est asynchrone -- personne ne doit rester devant son ecran en attendant que 200 factures soient evaluees une par une.
+4. Chaque dossier du lot passe ensuite par le moteur de regles a six piliers exactement comme un dossier temps reel (section 2.1). Aucune regle specifique au mode batch n'existe dans le Core : seul le point d'entree differe, la logique de validation reste unique.
+5. Un dossier malforme (champ obligatoire absent, date invalide, code acte inconnu) n'interrompt pas le traitement du lot : il recoit un statut `REJET_FORMAT` propre a lui-meme, avec le motif precis, pendant que les autres dossiers continuent leur evaluation normale.
+6. Une fois le lot traite, deux niveaux de restitution :
+   - **Rapport de synthese** : repartition des dossiers par decision (FAST_TRACK / CONTROLE_RAPIDE / AUDIT_APPROFONDI / REJET_FORMAT).
+   - **Rapport detaille** : une ligne par facture, avec son evaluation complete des six piliers -- exportable en CSV/Excel/PDF, ou consultable via `GET /api/v1/lots/{id}/rapport`.
+
+### 14.4 Traitement en file, pas en transaction unique
+
+Les dossiers d'un lot sont traites en file d'attente (queue), un par un, plutot qu'en une seule grosse transaction. L'echec ou le ralentissement d'un dossier ne doit jamais bloquer les autres. Aucune limite arbitraire de taille n'est fixee a ce stade de conception ; le dimensionnement reel se calibrera une fois un premier volume de test observe.
+
+### 14.5 Idempotence
+
+Un centre peut corriger une facture rejetee et la resoumettre dans un lot ulterieur. Pour eviter tout double traitement ou double paiement potentiel, chaque dossier d'un lot porte une cle de dedoublonnage fournie par le centre lui-meme (numero de facture interne + code formation). Une resoumission avec la meme cle mais un contenu modifie remplace la version precedente dans l'historique du dossier ; elle ne cree jamais un doublon de paiement. Meme preoccupation que celle deja traitee pour la synchronisation du mode degrade (section 7.4) -- la solution se generalise naturellement au batch.
+
+### 14.6 Articulation avec le mode degrade et les PEC
+
+- Un dossier cree hors-ligne pendant le mois (section 7) suit sa Sync Queue habituelle des la reconnexion, puis peut simplement etre rattache au lot mensuel une fois synchronise : le lot est un regroupement de presentation, pas un chemin de traitement parallele a celui deja defini.
+- Un numero de PEC present dans un dossier de lot est verifie exactement comme en temps reel, par requete au connecteur payeur concerne -- jamais valide sur la seule presence d'un numero dans le fichier importe. C'est directement la correction retenue pour l'incident du CHR Dapaong (F7, section 8.2) : le batch ne doit pas rouvrir cette faille sous une autre forme.
+
+### 14.7 Format d'import : FHTP s'adapte au centre, pas l'inverse
+
+Confirme par Dr Amadou, 9 juillet 2026 : plutot que d'imposer un format unique de fichier Excel/CSV, il vaut mieux que FHTP s'adapte au format que chaque centre utilise deja -- meme logique que celle deja retenue pour les logiciels terrain (FHTP-KNO-001 section 3.5) : FHTP s'integre a l'existant, il ne remplace pas les habitudes deja en place.
+
+Nouvelle entite `Profil_Import_Centre` : voir section 6.
+
+**Fonctionnement retenu :** a l'onboarding d'un centre (ou lors de sa premiere soumission groupee), un exemple de fichier tel qu'il l'utilise deja est depose une fois ; l'equipe FHTP -- ou le centre lui-meme via un assistant de configuration simple -- associe chaque colonne detectee a un champ du modele generique. Ce mapping est enregistre comme profil et reutilise automatiquement a chaque soumission suivante, sans que le centre ait a reformater son export mensuel habituel. Si le centre change de logiciel ou modifie la structure de son fichier, une nouvelle version du profil est creee -- l'ancienne reste consultable pour l'historique, meme logique de versionnage que le reste des referentiels.
+
+### 14.8 Risque de fiabilite -- reconnaissance des PDF issus de scans de factures
+
+Inquietude soulevee par Dr Amadou, 9 juillet 2026, a propos du deuxieme cas de la section 14.2 (compilation scannee de feuillets papier) : la reconnaissance automatique risque de poser probleme en pratique. Ce n'est pas une inquietude a ecarter -- elle est fondee, et coherente avec ce que le projet a deja documente ailleurs :
+
+- Les feuillets de la convention CAT sont auto-carbones (FHTP-REF-001, Partie 2.7) : la copie la moins bonne d'une liasse a cinq feuillets est structurellement plus pale et moins nette que l'originale.
+- Les mentions manuscrites (diagnostic, posologie, signature) varient d'un prescripteur a l'autre et se superposent parfois au cachet -- exactement le type de document qui met en echec un OCR generaliste, pas seulement un cas limite rare.
+- Un scan fait au telephone par un operateur presse n'a pas la qualite d'un scanner a plat.
+
+**Decision de conception : ne pas faire reposer la validation automatique sur la seule confiance en l'OCR.** Concretement :
+
+1. L'extraction OCR propose des valeurs de champs, chacune avec un score de confiance.
+2. Tout champ en dessous d'un seuil de confiance (a calibrer sur de vrais echantillons, pas fixe arbitrairement ici) est signale comme a verifier, jamais devine silencieusement.
+3. Un dossier issu de ce chemin ne peut pas atteindre une evaluation a six piliers avant qu'un operateur humain (au centre ou chez FHTP) ait confirme ou corrige les champs signales. Nouveau statut : `EN_ATTENTE_CONFIRMATION_OCR`.
+4. Le scan d'origine reste hashe et archive (meme mecanisme que la section 8.4) independamment des corrections apportees, pour que toute correction reste tracable jusqu'au document source.
+
+**Recommandation de sequencement, dans le meme esprit que celui deja retenu pour le reste du projet (documenter d'abord, construire ensuite) :** plutot que d'investir tout de suite dans un pipeline d'extraction automatique complet, il vaut mieux collecter un premier lot reel de factures scannees, les faire relire manuellement, et calibrer sur cet echantillon ce qui est reellement reconnaissable avant d'engager le developpement du sous-module OCR. En attendant, le chemin principal recommande pour la soumission groupee reste le format structure (CSV/Excel/JSON via le Profil_Import_Centre) ; le PDF scanne est accepte comme piece justificative jointe au dossier, avec une saisie assistee plutot qu'une extraction automatique aveugle.
+
+---
+
+## 15. Verification de PEC en l'absence de connexion payeur -- piece scannee et referentiel des modeles de documents
+
+### 15.1 Rappel du principe deja acte, et de sa limite
+
+La correction F7 (section 8.2) est ferme : la validite d'une PEC est toujours verifiee par requete au connecteur payeur concerne, jamais par la seule presence d'un numero au bon format. C'est la correction directe de l'incident du CHR Dapaong (FHTP-KNO-001 section 6.1).
+
+Cette regle suppose que le connecteur payeur est joignable. Le mode degrade (section 7) couvre deja la coupure reseau generale, avec un plafond clair : un dossier cree hors ligne ne recoit jamais FAST_TRACK avant reconnexion et reevaluation en ligne. Mais rien n'etait prevu de specifique pour le cas d'une PEC precisement, au-dela de ce plafond general. Demande de Dr Amadou, 9 juillet 2026 : durcir ce point particulier plutot que de le laisser dans le seul filet generique du mode degrade.
+
+### 15.2 Piece scannee obligatoire
+
+Quand le connecteur du payeur concerne est injoignable et qu'un acte du dossier depend d'une PEC, FHTP exige le rattachement d'un scan de la PEC accordee avant d'accepter le dossier, meme en statut provisoire. Sans ce scan, le dossier reste bloque en attente de piece -- pas de contournement silencieux.
+
+Ce scan est hashe au moment du depot (meme mecanisme que la section 8.4, ancrage cote serveur) : ce qui a ete fourni a cet instant precis est fige, pour qu'une substitution ulterieure du document soit detectable.
+
+### 15.3 Referentiel des modeles de documents payeurs
+
+Un scan seul ne prouve rien par lui-meme -- n'importe quel document peut etre scanne. Pour donner un minimum de valeur a ce controle en attendant la verification en ligne, FHTP memorise le format officiel connu de chaque type de document delivre par chaque payeur, et compare le scan recu a ce modele de reference.
+
+**Precision de Dr Amadou, 9 juillet 2026 : pour un meme payeur, le format varie selon le type d'acte.** Une PEC d'hospitalisation, une entente pour analyse biologique, une pour imagerie, une pour pharmacie (TPC), une pour kinesitherapie et une pour lunetterie n'ont pas la meme structure -- meme si l'en-tete et le cachet du payeur restent en general identiques d'un type d'acte a l'autre. Le referentiel distingue donc deux niveaux plutot que de dupliquer l'en-tete et le cachet dans six entrees differentes : `Modele_Payeur_Socle` (mentions communes) et `Modele_Document_Payeur` (mentions specifiques par type d'acte) -- voir section 6.
+
+Le rapprochement combine les deux niveaux : mentions communes du socle du payeur, plus mentions specifiques au type d'acte concerne par le dossier. Ca reste un filtre de coherence structurelle (presence des mentions attendues, mise en page reconnaissable), pas une preuve cryptographique -- meme nature de verification que le pilier 4 (coherence documentaire), appliquee ici a un document specifique plutot qu'a l'ordonnance elle-meme.
+
+**Tranche le 9 juillet 2026, sur confirmation de Dr Amadou :** un payeur garde la meme identite visuelle quel que soit le centre ou l'antenne regionale qui delivre le document -- pas de variante a prevoir dans le cas general. Par prudence, une porte de sortie reste neanmoins ouverte plutot que fermee en dur : le champ `variante_centre` (nullable, section 6) ne sert que si une exception reelle est un jour constatee ; tant qu'il reste vide, le rapprochement utilise le modele generique du payeur.
+
+### 15.4 Statuts et issue
+
+`PEC_Entente_Prealable` (section 6) gagne un statut intermediaire : `EN_ATTENTE_VERIFICATION_SCAN`, avec un champ `scan_hash` associe.
+
+- **Scan coherent avec le modele du payeur** -> le dossier peut avancer, mais reste plafonne exactement comme en mode degrade (section 7.2) : jamais FAST_TRACK avant que le numero de PEC ait ete effectivement reconfirme en ligne des la reconnexion. Le rapprochement visuel achete de la continuite de service, pas une validation definitive.
+- **Scan incoherent** (mentions manquantes, mise en page qui ne correspond a aucun modele connu) -> statut ANOMALIE sur le pilier documentaire, escalade vers AUDIT_APPROFONDI, avec motif explicite plutot qu'un rejet muet -- le prestataire doit savoir precisement ce qui cloche pour pouvoir regulariser.
+- Des la reconnexion, la verification en ligne reprend la priorite sur tout le reste : si le payeur infirme la PEC malgre un scan juge coherent, le dossier bascule en CONTROLE_RAPIDE, comme deja prevu pour toute reevaluation post-synchronisation (section 7.2).
+
+---
+
+## 16. Architecture de deploiement
+
+### 16.1 Trois profils, pas un deploiement unique
+
+Tous les centres n'ont ni la meme infrastructure, ni la meme connectivite, ni le meme volume de dossiers. FHTP retient trois profils de deploiement plutot qu'un modele unique impose partout.
+
+| Profil | Pour qui | Ce qui est installe |
+|---|---|---|
+| **Portail** | Cabinet sans logiciel, sans personnel technique (module de saisie minimale, section 5.3) | Rien. Acces web pur, y compris en connexion bas debit sur mobile. |
+| **Agent** | Centre avec un logiciel existant (SIH, logiciel d'officine, ou simplement un tableur de facturation habituel) | Un agent leger installe aux cotes du logiciel existant, pas a sa place. |
+| **Instance Locale** | Grand centre a fort volume et connectivite peu fiable (ex. CHR de reference regionale) | FHTP Core complet, deploye sur site, avec synchronisation periodique plutot que dependance continue. |
+
+Le choix du profil se fait a l'onboarding (section 17.1), pas une fois pour toutes : un centre peut evoluer d'un profil a l'autre si sa situation change (un cabinet qui grandit, un centre qui change de logiciel).
+
+### 16.2 Profil Portail -- y compris sur telephone personnel
+
+Aucune installation. Le centre se connecte au portail web de FHTP (module de saisie minimale, section 5.3), saisit ses dossiers un par un ou depose un fichier pour une soumission groupee (section 14). Toute la logique tourne cote FHTP Core distant. C'est le profil le plus simple a deployer, et celui qui demande le moins de maintenance cote centre -- au prix d'une dependance complete a la connectivite au moment de l'usage.
+
+**Precision de Dr Amadou, 9 juillet 2026 : le centre peut etre sans connexion propre, mais les personnes qui y travaillent ont presque toujours une connexion mobile sur leur telephone personnel.** C'est une realite de terrain distincte de la coupure reseau generale deja couverte par le mode degrade (section 7) : la, on parle d'un centre qui perd sa connexion et se resynchronise plus tard. Ici, il s'agit d'utiliser directement la connexion mobile d'un membre du personnel comme canal, au moment meme ou le centre n'a pas la sienne.
+
+**Decision retenue : une application web progressive (PWA), pas trois applications natives separees.** Le portail doit etre utilisable depuis un navigateur mobile -- Android, Apple (iOS/Safari), et Huawei -- sans passer par un magasin d'applications. Trois raisons a ce choix plutot qu'un developpement natif par plateforme :
+
+- **Contrainte Huawei, a ne pas sous-estimer :** depuis les sanctions americaines de 2019, les telephones Huawei recents n'embarquent plus les Services Mobiles Google (GMS) -- remplaces par les Services Mobiles Huawei (HMS), un ecosysteme different. Une application Android classique qui depend de GMS (notifications push via Firebase, par exemple) ne fonctionne pas forcement correctement sur ces appareils. Une PWA, purement web, contourne entierement ce probleme : elle ne depend ni de GMS ni de HMS.
+- **Un seul developpement pour les trois ecosystemes**, plutot que trois applications natives a maintenir en parallele -- realiste pour une equipe FHTP de taille limitee a ce stade.
+- **Coherence avec l'existant** : le Profil Portail est deja pense "accessible depuis n'importe quel navigateur, y compris mobile en connexion bas debit" (section 5.3). Ce choix ne fait qu'assumer explicitement ce qui etait deja implicite.
+
+**Limite honnete a ne pas cacher :** le support des PWA sur iOS/Safari reste historiquement plus limite que sur Android (synchronisation en arriere-plan, notifications). Une alerte critique (licence, rejet urgent) ne peut donc pas dependre uniquement d'une notification PWA si une part significative des utilisateurs est sur iPhone. Solution retenue : un canal SMS en complement pour les alertes critiques uniquement (section 16.6), puisque le SMS fonctionne sur n'importe quel telephone, sans application ni meme connexion data.
+
+### 16.3 Profil Agent
+
+**Ce que l'agent fait, et ce qu'il ne fait pas.** L'agent est un petit composant installe sur le poste ou le serveur du centre, a cote du logiciel de facturation ou de vente deja en place. Il ne remplace jamais ce logiciel (principe deja pose en FHTP-KNO-001 section 3.5) : il se contente de faire le pont entre ce que le centre produit et FHTP Core.
+
+**Trois canaux d'ingestion generiques, plutot qu'une integration par editeur de logiciel.** C'est le point qui repond directement a la demande de rester adaptable : au lieu de developper une integration specifique pour chaque logiciel terrain rencontre -- risque reel vu la variabilite deja constatee sur le terrain (FHTP-KNO-001 section 6.1, CHR Dapaong) -- l'agent n'expose que des canaux generiques, reutilisables quel que soit le logiciel en face :
+
+1. **Dossier surveille (file watch)** : le centre exporte regulierement un fichier (Excel, CSV, PDF) dans un dossier local ; l'agent detecte le nouveau fichier et le transmet a FHTP Core via le Profil_Import_Centre deja defini (section 14.7), qui sait deja mapper les colonnes propres a ce centre.
+2. **Point d'appel local minimal** : pour les rares logiciels capables d'appeler une API locale, l'agent expose un point d'entree HTTP restreint a `localhost`, qui relaie ensuite vers FHTP Core.
+3. **Saisie de secours** : en cas de defaillance des deux canaux precedents, l'agent redirige simplement vers le Profil Portail (16.2), y compris sa variante mobile -- jamais de blocage total faute d'integration technique.
+
+**Cache local et mode degrade.** L'agent embarque une copie locale des referentiels necessaires (tarifs, regles, libelles) selon les seuils de fraicheur deja retenus (section 8.5), et applique le mode degrade deja defini (section 7) en cas de coupure -- aucune logique nouvelle, l'agent est un point d'acces au mecanisme deja concu, pas un systeme parallele.
+
+**Consequence pour la conception a venir :** quand un nouveau logiciel terrain est rencontre, la premiere question n'est pas "faut-il developper un connecteur dedie ?" mais "l'un des trois canaux generiques suffit-il ?". Le developpement d'un connecteur sur mesure (au sens de la section 3) reste possible, mais devient l'exception plutot que la regle par defaut -- cf. workflow 17.5.
+
+### 16.4 Profil Instance Locale
+
+Reserve aux centres ou le volume et la fragilite de la connectivite justifient de faire tourner FHTP Core lui-meme sur place, pas seulement un agent. Le CHR Dapaong, deja cite comme centre de reference regionale avec une connectivite limitee (FHTP-KNO-001 section 6.1), est le candidat naturel a ce profil.
+
+**Fonctionnement :** moteur de regles, gestionnaire de dossiers et cache des referentiels tournent localement. L'instance locale ne depend du reseau que pour :
+- la verification en ligne des PEC aupres des connecteurs payeurs (jamais contournable, cf. F7, section 8.2) ;
+- la synchronisation periodique des referentiels et des regles (mise a jour, pas dependance continue) ;
+- l'ancrage externe deja retenu pour l'integrite du Journal de Conformite et, desormais, pour la licence (section 12.5).
+
+**Securite :** memes exigences que le cache local deja definies section 7.3 (chiffrement au repos, reauthentification locale), renforcees ici par le fait que l'instance heberge davantage de logique, pas seulement des donnees en attente de synchronisation.
+
+### 16.5 Propagation des mises a jour, quel que soit le profil
+
+Referentiels, regles versionnees, libelles (section 13) se propagent selon le meme mecanisme quel que soit le profil : une file de mise a jour, consommee a la reconnexion pour les profils Agent et Instance Locale, immediate pour le profil Portail qui n'a pas de cache local. Une seule mecanique de diffusion, pas une par profil.
+
+### 16.6 Le telephone personnel comme canal, pas comme extension du centre
+
+Deux usages concrets du telephone personnel, a distinguer :
+
+1. **Relais de connectivite** : un membre du personnel active le partage de connexion (hotspot) de son telephone pour donner un acces internet temporaire au poste du centre qui execute l'Agent ou accede au Portail. FHTP ne pilote pas ce choix -- c'est une pratique terrain, pas une fonctionnalite logicielle -- mais l'architecture doit rester indifferente a l'origine de la connexion : une requete HTTPS via un hotspot personnel n'est pas differente d'une requete via la ligne fixe du centre. Aucune logique specifique a ajouter, seulement ne jamais supposer une seule source de connectivite possible.
+2. **Acces direct depuis le telephone** : le membre du personnel consulte ou soumet un dossier directement depuis le navigateur de son propre telephone, sans passer par le poste du centre.
+
+**Le deuxieme usage change la donne cote securite.** Un telephone personnel n'est pas un appareil du centre : il peut etre perdu, vole, revendu, prete, avec un niveau de controle bien plus faible qu'un poste fixe. Le principe deja pose pour le cache local (section 7.3 : *"un poste ou telephone perdu ou vole ne doit pas exposer de donnees en clair"*) anticipait deja ce cas -- cette section l'active concretement plutot que de le laisser theorique.
+
+**Consequence de conception : sur telephone personnel, FHTP se comporte en client fin, pas en cache lourd.** Contrairement a l'Agent (16.3), qui conserve une copie locale persistante des referentiels, l'acces via telephone personnel reste transitoire par defaut : authentification a chaque session, aucune conservation prolongee de PEC ou de referentiels sensibles sur l'appareil au-dela de la session en cours. Meme arbitrage que celui deja fait entre Agent et Instance Locale (16.1) : plus l'appareil est personnel et hors du controle du centre, plus FHTP y stocke peu, quitte a demander une nouvelle authentification plus souvent.
+
+### 16.7 Alertes critiques par SMS, en complement du portail
+
+Pour ne pas dependre uniquement d'une notification applicative -- limitation deja notee pour iOS en 16.2 -- les alertes reellement critiques (echeance de licence proche, rejet necessitant une action urgente) sont doublees par SMS vers le numero enregistre de l'operateur responsable. Le SMS ne demande ni application installee, ni meme connexion data active, seulement une couverture reseau mobile -- coherence directe avec le constat de depart de Dr Amadou : la connexion mobile est presque toujours la, meme quand la connexion du centre ne l'est pas.
+
+---
+
+## 17. Workflows operationnels cote equipe FHTP
+
+### 17.1 Onboarding d'un centre
+
+1. **Qualification du profil de deploiement** (16.1) : volumetrie attendue, connectivite reelle du site, presence ou non d'un logiciel existant. Decision documentee, pas supposee.
+2. **Configuration** : emission de la Cle_Licence (12.5) avec le palier tarifaire retenu ; si soumission groupee prevue, configuration du Profil_Import_Centre a partir d'un exemple reel du fichier du centre (14.7).
+3. **Attribution des roles RBAC** (section 8.2, F4) au personnel du centre.
+4. **Test a blanc** : quelques dossiers reels traites avant la bascule en production, pour verifier le mapping et la comprehension des rapports par l'equipe du centre -- pas de mise en production directe sans ce passage.
+
+### 17.2 Support et remontee d'incident
+
+Distinction a maintenir entre deux natures d'incident, orientees vers des traitements differents :
+- **Incident technique** (connectivite, agent en panne, fichier mal forme) : traitement rapide, souvent resolu par la relecture du Profil_Import_Centre ou un redemarrage de l'agent.
+- **Incident metier** (contestation d'un rejet, question sur l'application d'une regle) : oriente vers la meme logique d'alerte recours deja definie dans les PRD, jamais traite comme un simple bug.
+
+Canal de remontee realiste plutot que theorique : telephone ou message direct dans un premier temps (coherent avec la realite deja documentee des echanges terrain), consolide ensuite dans un suivi structure pour ne pas perdre la trace d'un probleme recurrent.
+
+### 17.3 Boucle terrain -> evolution des regles
+
+Un probleme remonte du terrain (une regle mal comprise, un cas non prevu) ne modifie jamais directement le Referentiel de Regles. Il suit le meme principe de rigueur que le reste du projet : toute modification de regle doit etre motivee et sourcee avant publication d'une nouvelle version (coherent avec la discipline deja appliquee dans le Knowledge Book, section 3.1 -- aucune regle sans source verifiable). L'equipe FHTP centralise ces remontees, les qualifie, et ne pousse une nouvelle version qu'apres validation.
+
+### 17.4 Suivi operationnel de la licence
+
+Le mecanisme technique (12.6) gere la degradation automatique. Cote equipe, un tableau de bord des echeances (J-30, J-15...) doit declencher un contact humain -- appel ou message -- **avant** que la degradation automatique ne s'enclenche. L'automatisation gere le filet de securite commercial ; l'equipe garde la main sur la relation, dans le meme esprit d'aide maximale deja valide pour le mecanisme lui-meme.
+
+### 17.5 Nouvelle integration terrain rencontree -- workflow generique
+
+C'est le workflow qui repond directement a la variabilite du terrain. Plutot que de traiter chaque nouveau logiciel ou format rencontre comme un projet de developpement, la demarche reste volontairement legere et se limite a trois etapes, dans l'ordre :
+
+1. **Observer et documenter** l'existant, comme cela a deja ete fait pour le CHR Dapaong (FHTP-KNO-001 section 6.1) -- jamais supposer un format avant de l'avoir constate.
+2. **Configurer avec les mecanismes generiques deja en place** : un des trois canaux de l'agent (16.3), ou un nouveau Profil_Import_Centre. Dans l'immense majorite des cas, ca suffit.
+3. **Escalader vers un connecteur sur mesure** (au sens de la section 3) seulement si les mecanismes generiques se revelent reellement insuffisants -- l'exception, pas le reflexe par defaut.
+
+### 17.6 Supervision
+
+Suivi des dossiers restes en attente d'action humaine -- `EN_ATTENTE_CONFIRMATION_OCR` (14.8), `EN_ATTENTE_VERIFICATION_SCAN` (15.4) -- avec un delai de traitement a definir, pour qu'un dossier ne reste jamais bloque indefiniment faute d'attention. Suivi egalement des instances locales (16.4) dont la derniere synchronisation depasse le seuil de fraicheur retenu : alerte vers l'equipe, pas seulement vers le centre, pour anticiper une intervention plutot que la decouvrir a posteriori.
+
+---
+
+## 18. UX/UI (UIX)
+
+### 18.1 Principe directeur
+
+L'interface se concoit d'abord pour un operateur en connexion bas debit sur un telephone, pas pour un poste de bureau confortable -- c'est la realite deja etablie (section 16.2, 16.6). Chaque ecran doit rester utilisable en 2G/3G degradee, sans image lourde ni dependance a un rendu complexe.
+
+### 18.2 Ecrans principaux par role
+
+Les roles RBAC deja definis (section 8.2, F4) determinent ce que chaque ecran expose, pas seulement l'apparence :
+
+| Role | Ecrans principaux |
+|---|---|
+| **Operateur_Saisie** | Connexion -> Saisie d'un dossier unitaire -> Ecran de decision (six piliers + decision finale) -> Soumission de lot (depot de fichier, suivi de progression) -> Rapport de lot |
+| **Prescripteur** | Memes ecrans, avec saisie du diagnostic CIM-10, des actes et prescriptions |
+| **Medecin_Conseil** | File des dossiers signales A_VERIFIER/ANOMALIE -> Detail d'un dossier avec motifs -> Declenchement de controle -> Consultation des PEC en attente |
+| **Administrateur_Centre** | Gestion des comptes RBAC du centre -> Statut de licence (12.6) -> Configuration du Profil_Import_Centre (14.7) |
+
+### 18.3 Un concept transversal : la file d'actions en attente
+
+Plusieurs statuts deja definis bloquent un dossier en attendant une action humaine : `EN_ATTENTE_CONFIRMATION_OCR` (14.8), `EN_ATTENTE_VERIFICATION_SCAN` (15.4), `CONTROLE_RAPIDE` a regulariser, licence en phase Grace ou Degradee (12.6). Plutot que de multiplier les ecrans dedies a chacun, un seul ecran transversal -- la **file d'actions en attente** -- regroupe tout ce qui demande une intervention humaine, trie par urgence. C'est l'ecran d'accueil naturel de l'Operateur_Saisie et de l'Administrateur_Centre.
+
+### 18.4 Lisibilite du statut des six piliers
+
+Les statuts CONFORME / A_VERIFIER / ANOMALIE ne doivent jamais reposer sur la seule couleur (rouge/orange/vert) pour rester lisibles en cas de daltonisme, frequent, et sur un ecran de qualite inegale en usage terrain. Chaque statut porte systematiquement une icone distincte et son intitule textuel en toutes lettres, resolu selon la langue de l'utilisateur (section 13).
+
+### 18.5 Multilinguisme et RTL en pratique
+
+Le choix de langue (francais, anglais, arabe, portugais, espagnol -- section 13.4) ne se limite pas a traduire le texte : pour l'arabe, la mise en page doit s'inverser correctement (droite a gauche), pas seulement le sens de lecture du texte. Ce point, deja signale comme limite technique en 13.4, doit etre verifie concretement des les premieres maquettes, pas laisse pour la fin du developpement.
+
+### 18.6 Version mobile (PWA)
+
+Reprend les memes ecrans que 18.2, dans une version allegee coherente avec le mode client fin deja retenu pour l'acces personnel (section 16.6) : pas de tableau de bord complet a charger, un acces direct a la tache du moment (saisir un dossier, verifier un statut), et une deconnexion plus frequente puisque l'appareil n'appartient pas au centre.
+
+### 18.7 Premiere maquette produite
+
+Un premier ecran a ete maquette pour valider le concept avant d'aller plus loin : l'ecran de decision d'un dossier, avec les six piliers affiches en grille, chaque statut porte par une icone et un intitule (pas la seule couleur, cf. 18.4), et le motif de rejet ou de verification affiche en clair sous la grille. Les ecrans suivants (file d'actions en attente, saisie de dossier, version mobile) restent a produire dans le meme esprit, de facon incrementale plutot que tous a la fois.
+
+### 18.8 Ce qui reste a faire
+
+Les wireframes des ecrans restants, le systeme de composants graphiques complet, et les tests utilisateurs avec de vrais operateurs de terrain restent a conduire -- etape logique suivante une fois ces principes valides par Dr Amadou.
+
+---
+
+## 19. Strategie de test (TST)
+
+### 19.1 Principe directeur
+
+Les flux de validation deja decrits en detail (section 10, circuits 10.1 a 10.6) sont, de fait, presque des scripts de test : chaque etape, chaque branchement `<Decision>`, chaque issue attendue y est deja ecrite. La strategie de test s'appuie sur cet acquis plutot que d'en repartir de zero.
+
+### 19.2 Niveaux de test
+
+| Niveau | Objet | Exemple |
+|---|---|---|
+| **Unitaire** | Une regle isolee du moteur de regles | R-TG-017 : un dossier avec diagnostic R68 doit produire ANOMALIE, quel que soit le reste du dossier |
+| **Integration connecteur** | Comportement face a un payeur simule (mock), y compris latence et indisponibilite | Connecteur INAM indisponible -> bascule en mode degrade (section 7), jamais de FAST_TRACK direct |
+| **Bout en bout par scenario** | Un circuit complet de la section 10, du depot du dossier a la decision finale | Rejouer le circuit 10.1 (consultation AMU) avec un dossier conforme, un dossier avec PEC manquante, un dossier R68 |
+| **Non-regression** | Un jeu de dossiers de reference, rejoue a chaque nouvelle version du Referentiel de Regles | Verifier qu'une mise a jour de regle ne change pas le comportement des regles qu'elle ne visait pas a modifier |
+| **Charge** | Un lot de plusieurs centaines de dossiers (section 14) | Verifier que le traitement en file (14.4) ne bloque jamais l'ensemble du lot a cause d'un seul dossier malforme |
+| **Securite** | RBAC, falsification, integrite | Un operateur d'un centre ne peut jamais lire les dossiers d'un autre centre ; un scan de PEC ne correspondant a aucun modele connu (15.3) est detecte ; une horloge locale reculee est reperee par l'ancrage externe (12.5) |
+| **OCR** | Reconnaissance de PDF scannes (14.8) | Mesurer le taux reel de reconnaissance sur un echantillon de vraies factures scannees, avant d'investir davantage dans ce sous-module -- cf. recommandation deja actee de calibrer avant de construire |
+| **Acceptation (UAT)** | Un centre pilote, avant generalisation | Reprend le "test a blanc" deja prevu a l'onboarding (17.1), formalise comme jalon de recette explicite |
+
+### 19.3 Donnees de test
+
+Toujours des donnees synthetiques ou anonymisees, jamais de vrais dossiers patients -- coherent avec le principe Privacy by Design deja pose (section 8.1) : FHTP ne stocke jamais le contenu medical brut, un environnement de test n'a pas de raison d'y deroger.
+
+### 19.4 Lien avec le cycle de vie des regles
+
+Chaque nouvelle version d'une regle (section 2.1, versionnage deja prevu) doit etre accompagnee d'un jeu de cas de test associe avant publication -- ce qui donne un mecanisme de retrait rapide (rollback) en cas de regle mal calibree : rejouer le jeu de non-regression suffit a detecter l'ecart avant qu'il n'atteigne la production. Ce point rejoint directement le besoin deja identifie cote workflow operationnel (17.3, boucle terrain -> evolution des regles).
+
+### 19.5 Outillage retenu
+
+**Confirme par Dr Amadou, 9 juillet 2026 : FHTP Core sera ecrit en Python.** L'outillage de test se precise en consequence :
+
+- **Tests de regles pilotes par les donnees.** Chaque regle du Referentiel de Regles (section 2.1) est deja un objet JSON versionne. Les cas de test associes suivent le meme principe -- des fixtures JSON/YAML (dossier d'entree + resultat attendu par pilier), rejouees avec `pytest` et son mecanisme de parametrage (`pytest.mark.parametrize`), pour ajouter un nouveau cas de test sans toucher au code du moteur.
+- **Connecteurs payeurs simules.** Un petit serveur de simulation Python (par exemple via `FastAPI` ou `Flask` en mode test), exposant exactement les contrats deja definis (`IConnecteurPayeur`, `IConnecteurTerrain`, section 3.1-3.2), avec des scenarios configurables : latence, indisponibilite, reponse ACCORDE/REFUSE sur une PEC.
+- **Tests de charge sur la soumission groupee** (section 14) : `Locust`, qui reste dans l'ecosysteme Python plutot que d'introduire un outil dans un autre langage, pour simuler un lot de plusieurs centaines de dossiers.
+- **Volume de depart du jeu de non-regression :** au minimum un cas positif et un cas negatif par regle actuellement recensee dans les trois PRD et les RP24 (de l'ordre de 100 a 150 regles) -- soit un point de depart d'environ 200 a 300 cas, appele a grandir au fil des cas remontes du terrain (19.4 / 17.3).
+- **Calendrier de recette :** non-regression rejouee automatiquement a chaque nouvelle version de regle (continu) ; test a blanc a chaque onboarding de centre (17.1) ; recette plus large avec le centre pilote a un rythme trimestriel, realiste pour la taille actuelle de l'equipe.
+
+### 19.6 Ce qui reste a faire
+
+Le choix du framework web precis (FastAPI vs Flask, par exemple) et de l'ORM/base de donnees restent a trancher au moment du developpement -- cette section fixe le langage et la logique de test, pas encore chaque bibliotheque.
+
+---
+
+## 20. Registre des risques -- renvoi
+
+Le registre des risques metier et projet (dependance a un payeur dominant, changement reglementaire non anticipe, resistance a l'adoption terrain, resiliation en serie, dependance a une seule personne, fiabilite de l'OCR, extension regionale prematuree) est documente dans **FHTP-KNO-001, section 12**, et non dans ce document. Decision de placement du 9 juillet 2026 : la majorite de ces risques sont metier et projet, pas techniques -- la table de failles de securite (F1-F9, section 8.2 et 8.6) reste ici, dans ARC-001, qui est le bon endroit pour un risque d'architecture. Le risque R8 (exclusion de contrat mal appliquee par manque de granularite, section 6) est egalement trace dans ce meme registre du Knowledge Book.
+
+---
+
+## 21. Architecture Decision Records (ADR)
+
+Aucune decision nouvelle dans cette section : reprise de choix deja pris et deja traces dans les journaux des versions de FHTP-KNO-001 et FHTP-ARC-001, mis en forme de fiche structuree (contexte / decision / alternatives ecartees / consequences).
+
+### ADR-001 -- FHTP Core independant du payeur
+
+**Contexte :** l'INAM, la CNSS et les assureurs CAT ont des logiques tarifaires structurellement differentes (R/E/TPC contre lettre-cle/coefficient).
+**Decision :** FHTP Core ne raisonne qu'en interfaces generiques (`IConnecteurPayeur`) ; chaque payeur est un connecteur interchangeable.
+**Alternatives ecartees :** coder la logique de chaque payeur directement dans le moteur de regles -- rejete, rendrait toute extension a un nouveau payeur ou pays couteuse.
+**Consequences :** un futur connecteur Ghana ou regional s'ajoute sans toucher au Core. *Source : FHTP-KNO-001 section 3.4.*
+
+### ADR-002 -- FHTP s'integre au terrain, il ne le remplace pas
+
+**Contexte :** les centres utilisent deja des logiciels de vente/SIH, ou parfois seulement Excel.
+**Decision :** FHTP se construit comme couche de validation, jamais comme remplacement d'un logiciel de gestion existant.
+**Alternatives ecartees :** un logiciel de caisse/gestion integre -- rejete, mettrait FHTP en concurrence inutile avec des editeurs deja en place et alourdirait sa responsabilite operationnelle.
+**Consequences :** connecteurs terrain generiques (section 16.3) plutot qu'un produit de gestion. *Source : FHTP-KNO-001 section 3.5.*
+
+### ADR-003 -- Aucun FAST_TRACK avant reevaluation en ligne (mode degrade)
+
+**Contexte :** un dossier cree hors ligne pourrait atteindre le paiement automatique avant toute verification reelle -- faille identifiee a la relecture.
+**Decision :** un dossier `MODE_DEGRADE` plafonne a `EN_VALIDATION_LOCALE`, jamais `FAST_TRACK`, avant synchronisation et reevaluation en ligne.
+**Alternatives ecartees :** faire confiance au cache local pour les cas juges simples -- rejete, ouvrait une fenetre d'exploitation en cas de coupure provoquee.
+**Consequences :** un operateur malveillant ne peut pas exploiter une coupure reseau pour faire valider un dossier fabrique. *Source : section 7.2.*
+
+### ADR-004 -- Une PEC est toujours verifiee par requete au payeur, jamais par le seul format
+
+**Contexte :** incident reel au CHR Dapaong -- une PEC reellement accordee mais absente physiquement a ete traitee comme un rejet, revelant l'inverse aussi vrai : un numero plausible mais jamais accorde pourrait passer.
+**Decision :** la validite d'une PEC est verifiee par requete au connecteur payeur, jamais par la seule conformite de format du numero.
+**Alternatives ecartees :** valider un numero de PEC sur sa seule forme (regex, longueur) -- rejete, insuffisant contre la fabrication.
+**Consequences :** meme en l'absence de connexion, un scan et un referentiel de modeles de documents (section 15) restent un filet provisoire, jamais un substitut definitif. *Source : section 8.2 (F7).*
+
+### ADR-005 -- Ancrage externe (type OpenTimestamps) pour l'integrite de l'audit et de la licence
+
+**Contexte :** un chainage interne du Journal de Conformite reste modifiable par un administrateur privilegie ; une horloge locale peut etre reculee pour prolonger une licence expiree.
+**Decision :** un ancrage periodique externe, public et gratuit, complete le chainage interne -- reutilise ensuite pour detecter la triche sur l'horloge de licence.
+**Alternatives ecartees :** infrastructure d'ancrage dediee (cout recurrent) -- rejetee a ce stade de financement du projet.
+**Consequences :** une seule mecanique sert deux besoins (integrite de l'audit, anti-triche de licence). *Sources : section 8.5 ; section 12.5.*
+
+### ADR-006 -- Jeton de licence signe, verifiable localement
+
+**Contexte :** FHTP doit generer un revenu ; l'acces doit expirer meme si FHTP Core est installe localement chez un centre.
+**Decision :** un jeton signe embarquant sa propre date d'expiration, verifie localement sans appel reseau systematique.
+**Alternatives ecartees :** verification en ligne a chaque requete -- rejetee, incompatible avec la realite de connectivite deja documentee et creerait une dependance reseau sur une fonction commerciale.
+**Consequences :** le mecanisme fonctionne identiquement en cloud ou en Instance Locale. *Source : section 12.5.*
+
+### ADR-007 -- Degradation progressive de licence plutot que coupure seche
+
+**Contexte :** les delais de paiement AMU depassent parfois 3 mois en pratique ; un renouvellement de licence peut prendre du retard pour des raisons administratives, pas de mauvaise foi.
+**Decision :** quatre phases (alerte, grace, degradee, suspendue) sur 60 jours, jamais de coupure immediate a l'echeance.
+**Alternatives ecartees :** suspension immediate a J+0 -- rejetee, contraire a l'esprit d'aide du projet et validee comme telle par Dr Amadou.
+**Consequences :** seuil de 60 jours valide, presente comme un preavis plutot qu'une rupture. *Source : section 12.6, valide le 9 juillet 2026.*
+
+### ADR-008 -- PWA plutot que trois applications natives (revise par ADR-013)
+
+**Contexte :** les telephones doivent couvrir Android, iOS et Huawei ; les Huawei recents n'ont plus les Services Mobiles Google.
+**Decision :** une application web progressive unique, sans dependance GMS ni HMS.
+**Alternatives ecartees :** trois applications natives separees -- rejetees, cout de maintenance disproportionne pour une equipe de taille limitee, et contournable de toute facon par la contrainte Huawei.
+**Consequences :** limite connue sur iOS (notifications en arriere-plan), compensee par un canal SMS pour les alertes critiques. *Source : section 16.2.*
+**Statut au 25 aout 2026 : partiellement revise, voir ADR-013 -- le constat Huawei/equipe reduite reste valide, mais la conclusion "PWA partout" est nuancee.**
+
+### ADR-009 -- Canaux d'ingestion generiques plutot qu'un connecteur par logiciel terrain
+
+**Contexte :** le terrain togolais change de logiciel ou de format sans preavis ; developper un connecteur par editeur rencontre n'est pas soutenable.
+**Decision :** l'Agent n'expose que trois canaux generiques (dossier surveille, appel local minimal, repli vers le Portail).
+**Alternatives ecartees :** un connecteur sur mesure par logiciel rencontre comme reflexe par defaut -- rejete, devient l'exception plutot que la regle (section 17.5).
+**Consequences :** une nouvelle integration terrain devient une question de configuration, pas un projet de developpement. *Source : section 16.3.*
+
+### ADR-010 -- Python comme langage de FHTP Core
+
+**Contexte :** un langage devait etre choisi pour construire FHTP Core.
+**Decision :** Python, confirme par Dr Amadou.
+**Alternatives ecartees :** aucune envisagee formellement -- preference directe de Dr Amadou, coherente avec le principe de stabilite deja retenu (ecosysteme mature, largement eprouve).
+**Consequences :** outillage de test verrouille en consequence (pytest, FastAPI/Flask, Locust). *Sources : FHTP-KNO-001 section 3.7 ; section 19.5.*
+
+### ADR-011 -- Sequencement volontaire : quatre scenarios en backlog
+
+**Contexte :** urgences, dentaire, teleconsultation, evacuation sanitaire pourraient etre rediges par anticipation.
+**Decision :** rester sur les trois scenarios deja stabilises (consultation, hospitalisation, pharmacie) ; les quatre autres restent en backlog volontaire.
+**Alternatives ecartees :** rediger les quatre scenarios par anticipation -- rejete, ce sont pour l'essentiel des variations de mecanismes deja couverts, mieux traitees apres un premier retour de terrain reel.
+**Consequences :** effort concentre sur ce qui est deja en usage plutot que disperse sur des scenarios hypothetiques. *Source : FHTP-KNO-001, "Decision de sequencement", 7 juillet 2026.*
+
+### ADR-012 -- Exclusions de contrat classees au pilier 2, pas au pilier 4
+
+**Contexte :** les flux CAT (section 10.4-10.6) placaient la verification des exclusions de police sous le pilier 4 (coherence documentaire), sans entite de donnees dediee ni granularite par categorie de beneficiaire.
+**Decision :** nouvelle entite `Exclusion_Contrat` (section 6), avec `categorie_beneficiaire` optionnelle (CADRE/EXECUTANT/AUTRE) ; verification reclassee au pilier 2 (coherence de regime).
+**Alternatives ecartees :** laisser la verification au pilier 4 -- rejete, une exclusion de police est une question de couverture contractuelle, pas un probleme de piece manquante, et les deux natures de rejet ouvrent des voies de recours differentes.
+**Consequences :** risque R8 ajoute au registre (FHTP-KNO-001, section 12). *Source : section 10, note sur le pilier 2 ; section 6.*
+
+### ADR-013 -- Client applicatif hybride : Flutter (Agent, Instance Locale, roles a interface riche) + web leger (Portail)
+
+**Contexte :** Dr Amadou souhaite une posture plus professionnelle pour l'ambition multiplateforme du projet (Web, Android, iOS, PC), suite a une recherche personnelle sur Flutter. Ce choix vient reinterroger ADR-008 (PWA unique).
+
+**Ce qui reste vrai d'ADR-008 :** le profil Portail (section 16.2) sert des cabinets sans personnel technique, ou l'installation depuis un magasin d'applications est une friction reelle, et ou la connexion reste en 2G/3G degradee -- un chargement web leger, sans installation, y reste superieur a toute alternative.
+
+**Ce qui change :** le raisonnement "PWA partout pour eviter trois codebases" n'est plus le seul chemin. Flutter compile depuis une base de code unique vers Android, iOS **et** desktop (Windows/Linux/macOS) -- le probleme de multiplier les codebases ne se pose donc pas non plus avec Flutter. Le blocage Huawei/GMS identifie en ADR-008 ne vient pas de Flutter lui-meme mais de dependances specifiques (notifications push via Firebase notamment) : contournable en n'utilisant pas ces briques et en gardant le canal SMS deja retenu (section 16.7) comme filet, quel que soit le client.
+
+**Decision :** posture hybride plutot que substitution complete.
+- **Profil Portail (section 16.2)** : web leger conserve, installation optionnelle plutot que socle de la strategie -- reste la porte d'entree zero-friction pour un cabinet sans logiciel.
+- **Profils Agent et Instance Locale (sections 16.3-16.4), et roles a interface riche** (Medecin_Conseil, Administrateur_Centre, saisie assistee OCR section 14.8, verification de scan de PEC section 15) : application Flutter, une seule base de code pour Android/iOS/desktop. Justifie par un besoin reel d'integration native -- capture photo directe pour l'OCR, reauthentification biometrique locale (section 7.3/16.6) plus naturelle qu'en navigateur, notifications fiables sur iOS (limite explicitement notee en ADR-008).
+- **Aucun changement cote backend** : les deux clients consomment la meme API FHTP Core (section 12) ; le choix de client n'a aucune incidence sur le moteur de regles, les connecteurs, ou le modele de donnees.
+
+**Alternatives ecartees :**
+- Flutter partout, y compris a la place du Portail -- ecarte, le poids de chargement de Flutter Web et la friction d'un app store contredisent directement le besoin de zero-installation qui a motive le Portail des le depart.
+- Conserver PWA partout sans reexamen -- ecarte, la richesse d'interface et l'integration native que Flutter permet (camera, biometrie, notifications) repondent a des besoins deja identifies mais imparfaitement couverts (limite iOS notee en ADR-008).
+
+**Consequences :** deux clients a maintenir au lieu d'un seul, mais chacun sert un besoin distinct plutot que de dupliquer le meme. Point de vigilance pour le developpement : ne pas introduire de dependance GMS-only dans le client Flutter, pour ne pas reintroduire le probleme Huawei qu'ADR-008 avait justement resolu. *Sources : section 16 ; ADR-008.*
+
+---
+
+## 22. Matrice de tracabilite (TRC)
+
+### 22.1 Structure de la matrice
+
+Le lien reglementation -> regle existe deja, regle par regle, dans les trois PRD. Le lien regle -> pilier existe deja dans le moteur de regles (section 2.1, champ `pilier`). Ce qui manquait : une matrice unique qui croise les quatre maillons -- reglementation, regle, pilier, et le test associe (section 19) -- plutot que de devoir recouper plusieurs documents a la main.
+
+Une ligne par regle, quatre colonnes fixes :
+
+| Regle | Source reglementaire | Pilier | Cas de test associe |
+|---|---|---|---|
+| R-TG-017 | Note Circulaire R68 / RP 24-10 | Coherence documentaire | `test_r68_rejet_immediat` |
+| R-TG-014 | RP 24-37 / CAT Art. 14 | Coherence documentaire | `test_ordonnance_validite_7j` |
+| R-TG-020 | RP 24-24 | Completude administrative | `test_echo_obstetricale_max3` |
+| RG-P07 | RP 24-32 | Coherence tarifaire | `test_substitution_generique_prix` |
+| RG-H06 | INAM Art. 31 | Coherence tarifaire | `test_calcul_sejour_jour_sortie_exclu` |
+| *(...)* | *(...)* | *(...)* | *(...)* |
+
+*(Extrait illustratif -- la matrice complete couvre l'ensemble des regles des trois PRD et des RP24, de l'ordre de 100 a 150 lignes, cf. section 19.5.)*
+
+### 22.2 Ce que cette matrice permet concretement
+
+- Verifier qu'aucune regle n'est depourvue de test avant une mise en production -- un vide dans la colonne "cas de test" est un signal, pas un detail.
+- Retrouver instantanement, en cas de contestation d'un rejet par un centre, le texte reglementaire exact qui justifie la regle appliquee.
+- Mesurer la couverture reelle du modele de confiance a six piliers : si un pilier a tres peu de regles rattachees, c'est soit qu'il est reellement moins charge (coherence graphique, backlog), soit qu'une reglementation existante n'a pas encore ete traduite en regle.
+
+### 22.3 Ce qui reste a faire
+
+La matrice complete (toutes les regles, pas cet extrait illustratif) reste a construire ligne par ligne a partir des trois PRD -- travail mecanique une fois la structure validee, pas une nouvelle conception. Le rattachement au composant technique (quel module du Core evalue quelle regle) pourra s'ajouter comme cinquieme colonne une fois le developpement engage, pas avant.
+
+---
+
+## 23. Request for Change (RFC)
+
+### 23.1 Principe
+
+De fait, chaque addendum valide par Dr Amadou dans ce fil de travail a fonctionne comme une RFC informelle : une proposition, une discussion, une decision, une trace datee dans un journal des versions. Cette section formalise ce deroule en gabarit reutilisable, dimensionne pour un projet a un seul decideur aujourd'hui -- pas un processus lourd pense pour une grande equipe qui n'existe pas encore.
+
+### 23.2 Gabarit RFC
+
+```
+RFC-XXX -- [titre court]
+Date :
+Demandeur :
+Contexte : pourquoi ce changement est propose
+Changement propose : ce qui change concretement
+Alternatives envisagees : au moins une, meme ecartee rapidement
+Impact : quels documents, quelles regles, quels composants sont touches
+Statut : PROPOSE | APPROUVE | REJETE | REPORTE
+Decision et date :
+```
+
+### 23.3 Statuts et ce qu'ils impliquent
+
+| Statut | Ce qu'il declenche |
+|---|---|
+| **PROPOSE** | Aucun changement effectif. Discussion en cours. |
+| **APPROUVE** | Le changement est integre dans le document concerne, avec une entree dans le journal des versions correspondant. |
+| **REJETE** | Conserve dans l'historique des RFC, pour ne pas relancer indefiniment la meme discussion sans nouvelle information. |
+| **REPORTE** | Cas deja rencontre dans ce projet -- l'extension regionale ou la recherche reglementaire pour d'autres pays (FHTP-KNO-001, "Decision de sequencement") sont des REPORTE de fait, pas des REJETE : la porte reste ouverte, juste pas maintenant. |
+
+### 23.4 Ce que ce processus n'est pas, a ce stade
+
+Pas de comite de validation, pas de delai formel de traitement -- Dr Amadou reste le seul decideur, et le processus doit rester a sa mesure. Ce gabarit prend tout son sens le jour ou une equipe se forme autour du projet et ou plusieurs personnes peuvent proposer un changement en parallele ; avant ca, il sert surtout a garder une trace uniforme, pas a ralentir la prise de decision.
+
+### 23.5 Application retroactive, a titre d'exemple
+
+```
+RFC-000 -- Degradation progressive de licence plutot que coupure seche
+Date : 9 juillet 2026
+Demandeur : Dr Amadou
+Contexte : un acces expire ne doit pas couper un centre du jour au lendemain,
+           coherent avec les delais de paiement AMU deja documentes.
+Changement propose : quatre phases sur 60 jours (alerte, grace, degradee, suspendue)
+                      plutot qu'une suspension immediate a l'echeance.
+Alternatives envisagees : suspension immediate -- ecartee, contraire a l'esprit
+                           d'aide du projet.
+Impact : section 12.6 ; ADR-007.
+Statut : APPROUVE
+Decision et date : validee par Dr Amadou, 9 juillet 2026.
+```
+
+---
+
+## 24. Journal des versions
 
 | Version | Date | Auteur | Changements |
 |---|---|---|---|
@@ -1292,3 +2091,23 @@ flowchart LR
 | 0.3 | 6 juillet 2026 | Claude (revue croisee) | Correction des tarifs CAT errones (C=1750/CS=2650 remplaces par les valeurs verifiees C=8000-7000/CS=10000-8500, FHTP-REF-001 Partie 2.4). Retrait du taux fixe "80% INAM/20% patient" non source, remplace par la confirmation directe de Dr Amadou : taux variable par acte (AMU) et par contrat (CAT), y compris contrats "Frais Reel" sans tarif de reference. Ajout du mode MODE_FORFAIT_DIAGNOSTIC dans l'interface generique du connecteur, anticipant un possible basculement des pays francophones vers une logique de forfait au diagnostic (type DRG). |
 | 0.4 | 7 juillet 2026 | Claude (revue approfondie ciblee) | Modele de donnees : ajout des entites Contrat_Payeur, Consentement_Patient, Contestation_Recours, et du champ origine_creation sur Dossier. Mode degrade : correction d'une faille permettant a un dossier hors-ligne d'atteindre FAST_TRACK avant reverification en ligne ; ajout du chiffrement au repos du cache local, de la reauthentification locale, et de la gestion des conflits de synchronisation. Securite : reecriture complete avec table de 7 failles identifiees et mitigations (ancrage du hash cote serveur, chainage du Log_Audit, RBAC, gestion des secrets, rate limiting, verification systematique des PEC aupres du connecteur plutot que par format). |
 | 0.5 | 7 juillet 2026 | Claude (decision, sur demande explicite de Dr Amadou) | Seuil de fraicheur du referentiel local tranche : differencie selon l'enjeu de l'acte (30-45 jours pour les actes courants, 7-15 jours avec confirmation en ligne obligatoire pour les actes a enjeu eleve). Integrite du Log_Audit tranchee : chainage interne obligatoire, complete par un ancrage externe periodique via un service de preuve d'existence public et gratuit (type OpenTimestamps), retenu pour son cout nul et sa resistance a la pression institutionnelle dans un environnement politise. |
+| 0.6 | 8 juillet 2026 | Claude (sur demande de Dr Amadou) | Ajout de l'API FHTP Core en exposition directe (section 12), distincte des connecteurs, separee en soumission unitaire synchrone et soumission groupee asynchrone. Ajout du support multilingue (section 13) : referentiel de libelles separe de la logique des regles, resolution de langue par requete/connecteur/defaut francais, portee limitee a francais/anglais pour l'instant. Ajout du mode de soumission groupee (batch, section 14) pour les centres facturant avec un logiciel tiers ou un tableur en fin de mois, avec nouvelle entite Lot_Soumission, traitement en file independant par dossier, idempotence par cle fournie par le centre, et articulation avec le mode degrade et la verification systematique des PEC deja actee. |
+| 0.7 | 9 juillet 2026 | Claude (sur demande de Dr Amadou) | Extension de la portee linguistique : portugais et espagnol (portabilite regionale, Guinee-Bissau/Cap-Vert et Guinee equatoriale), et arabe (besoin deja present au Togo : ONG islamiques gerant orphelinats et structures de soins associees, echangeant avec leurs partenaires en arabe) ; ajout d'un attribut de langue de rapport preferee par formation sanitaire, independant du payeur, et note sur le rendu RTL. Ajout du format PDF en soumission groupee, avec distinction entre export structure et compilation scannee de feuillets. Ajout d'une section dediee a la verification de PEC en l'absence de connexion payeur (section 15) : piece scannee obligatoire, hachage a l'ancrage, referentiel des modeles de documents payeurs pour un controle de coherence structurelle, statut intermediaire EN_ATTENTE_VERIFICATION_SCAN plafonne comme le mode degrade. |
+| 0.8 | 9 juillet 2026 | Claude (sur demande de Dr Amadou) | Referentiel des modeles de documents payeurs eclate en deux niveaux (Modele_Payeur_Socle pour l'en-tete et le cachet communs, Modele_Document_Payeur par type d'acte) pour refleter le fait qu'un meme payeur utilise un format different selon le type d'acte. Format des factures groupees tranche : nouvelle entite Profil_Import_Centre qui memorise le mapping de colonnes propre a chaque centre, configure une fois puis reutilise automatiquement. |
+| 0.9 | 9 juillet 2026 | Claude (sur demande de Dr Amadou) | Confirmation qu'un payeur garde la meme identite documentaire quel que soit le centre ou l'antenne regionale ; ajout du champ optionnel variante_centre par prudence, vide par defaut. Ajout de la section 14.8 sur le risque de fiabilite de la reconnaissance des PDF scannes : nouveau statut EN_ATTENTE_CONFIRMATION_OCR exigeant confirmation humaine avant evaluation par le moteur de regles, et recommandation de calibrer sur un echantillon reel avant d'investir dans un pipeline d'extraction complet. |
+| 0.10 | 9 juillet 2026 | Claude | Annexe recapitulative regroupant les nouvelles entites de l'API/i18n/batch/PEC scan, absorbee directement dans la section 6 lors de la fusion. |
+| 0.11 | 9 juillet 2026 | Claude (sur demande de Dr Amadou) | Developpement de la section 12 : modele de licence payante (nouvelle entite Cle_Licence, jeton signe verifiable localement sans appel reseau systematique, applicable que FHTP soit heberge centralement ou installe chez le centre), anti-triche sur l'horloge locale en reutilisant l'ancrage externe deja retenu pour le Journal de Conformite (section 8.5), degradation progressive en quatre phases plutot que coupure seche a l'expiration, table de codes d'erreur avec reutilisation du code HTTP 402 pour la licence expiree, et limitation de frequence differenciee entre soumission unitaire et soumission groupee. Ajout d'une remarque commerciale hors architecture sur un modele tarifaire hybride forfait + volume. |
+| 0.12 | 9 juillet 2026 | Claude (validation de Dr Amadou) | Seuil de 60 jours avant suspension complete (section 12.6) valide par Dr Amadou, presente comme l'equivalent d'un preavis de rupture de contrat plutot qu'une coupure immediate. |
+| 0.13 | 9 juillet 2026 | Claude (sur demande de Dr Amadou) | Premiere redaction de l'architecture de deploiement (section 16 : trois profils -- Portail, Agent, Instance Locale -- avec canaux d'ingestion generiques plutot qu'integration par editeur de logiciel) et des workflows operationnels cote equipe FHTP (section 17 : onboarding, support, boucle terrain -> regles, suivi de licence, workflow generique de nouvelle integration terrain, supervision). Concu volontairement sans specifier de connecteur terrain particulier, sur demande explicite de Dr Amadou, pour rester adaptable a un terrain reconnu comme changeant. |
+| 0.14 | 9 juillet 2026 | Claude (sur demande de Dr Amadou) | Consolidation de l'acces mobile (section 16.2 etendue, sections 16.6 et 16.7) : decision d'une PWA plutot que trois applications natives, pour contourner l'absence des Services Mobiles Google sur les telephones Huawei recents et eviter de maintenir trois codebases ; distinction entre le telephone comme simple relais de connectivite (hotspot) et comme acces direct, avec un traitement securite en client fin sur acces direct ; ajout d'un canal SMS de secours pour les alertes critiques. |
+| 0.15 | 9 juillet 2026 | Claude (sur demande de Dr Amadou) | Premiere redaction des deux aspects identifies comme non traites lors de l'etat des lieux du 9 juillet 2026 : UX/UI (section 18 -- ecrans par role RBAC, concept transversal de file d'actions en attente, lisibilite des statuts sans dependre de la couleur, RTL en pratique, version mobile allegee) et strategie de test (section 19 -- huit niveaux de test s'appuyant sur les circuits deja decrits en section 10, donnees toujours synthetiques, lien direct avec le cycle de vie des regles pour permettre un rollback rapide). |
+| 0.16 | 9 juillet 2026 | Claude (sur demande de Dr Amadou) | Passage aux maquettes et a l'outillage. Premiere maquette produite (ecran de decision d'un dossier, six piliers en grille avec icone et intitule par statut). Outillage de test precise sans presumer du choix de langage de FHTP Core, pas encore arrete a ce stade : tests de regles pilotes par des fixtures de donnees plutot que par du code, connecteurs payeurs simules respectant les contrats deja definis, volume de depart chiffre pour le jeu de non-regression (200 a 300 cas). |
+| 0.17 | 9 juillet 2026 | Claude (confirmation de Dr Amadou) | Python confirme comme langage de FHTP Core. Outillage verrouille en consequence : pytest parametre pour les fixtures de regles, simulateur de connecteurs en FastAPI/Flask, Locust pour les tests de charge. |
+| 0.18 | 9 juillet 2026 | Claude (sur demande de Dr Amadou) | Complement de la section Securite (8.6-8.8) : modele de menace STRIDE reclassant F1-F7 et ajoutant deux failles (F8 usurpation d'agent, F9 alteration locale du cache sur Instance Locale) ; politique de retention et de suppression des donnees, avec la duree de conservation de l'audit explicitement laissee ouverte faute de base reglementaire confirmee ; plan de reponse a incident en cinq etapes s'appuyant sur le Journal de Conformite chaine comme outil d'investigation central. |
+| 0.19 | 9 juillet 2026 | Claude (sur demande de Dr Amadou) | Premiere formalisation de onze decisions deja prises et deja tracees dans les journaux des versions existants, mises en forme de fiche ADR structuree (section 21). Aucune decision nouvelle a ce stade. |
+| 0.20 | 9 juillet 2026 | Claude (sur demande de Dr Amadou) | Premiere structure de la matrice de tracabilite (section 22 : regle -> source reglementaire -> pilier -> cas de test), avec extrait illustratif de cinq regles. Construction complete de la matrice laissee comme tache mecanique de suivi. |
+| 0.21 | 9 juillet 2026 | Claude (sur demande de Dr Amadou) | Premiere formalisation du processus de changement RFC (section 23) : gabarit, quatre statuts avec leur consequence, portee volontairement legere tant que le projet reste a un seul decideur, et un exemple retroactif construit a partir d'une decision deja prise (ADR-007). |
+| 0.22 | 9 juillet 2026 | Claude (sur demande de Dr Amadou) | Correction d'un angle mort identifie par Dr Amadou : les exclusions de contrat n'etaient traitees que generiquement (mention dans les flux CAT, absence de Presta+ cote AMU), sans entite dediee ni granularite par categorie de beneficiaire. Ajout de Exclusion_Contrat (avec categorie_beneficiaire optionnel, section 6), du champ categorie_contrat sur Beneficiaire, correction du pilier concerne (2, coherence de regime, plutot que 4 -- voir note en section 10 et ADR-012), et ajout du risque R8 au registre (FHTP-KNO-001, section 12). |
+| 0.23 | 9 juillet 2026 | Claude (sur demande de Dr Amadou) | Registre des risques metier et projet redige (sept risques initiaux), puis tranche comme devant vivre dans FHTP-KNO-001 plutot que dans ce document -- la majorite des risques y sont metier et projet, pas techniques. Ce document ne conserve qu'un renvoi (section 20) ; le contenu complet est dans FHTP-KNO-001 section 12. |
+| **0.6 (fusion)** | 9 juillet 2026 | Claude (sur demande de Dr Amadou) | **Fusion complete des neuf addenda ARC-001 (v0.6 a v0.23 ci-dessus, correspondant aux fichiers Addendum 1 a 9 deposes sur le repo) dans ce document maitre.** Renumerotation sequentielle et continue des sections (12 a 24, sans les sauts de numerotation laisses par les addenda individuels) pour une lecture lineaire. Le modele de donnees (section 6), la table des six piliers (section 2.1) et les flux CAT (section 10) integrent desormais directement les entites et corrections des addenda plutot que d'y renvoyer. Le registre des risques technique (F1-F9) reste ici (section 8.6) ; le registre des risques metier/projet (R1-R8) est renvoye vers FHTP-KNO-001 section 12, conformement a la decision de placement du 9 juillet 2026. Ce document et ses addenda sources (dossier `Complement-FHTP/` du repo) peuvent desormais etre consideres comme equivalents ; les fichiers d'addenda restent sur le repo a titre d'historique de decision, mais ce document fait foi pour toute lecture ou modification future. |
+| 0.7 | 25 aout 2026 | Claude (sur demande de Dr Amadou) | Renommage du document vers son nom canonique (sans suffixe de version) ; fragments d'addenda et anciennes bases v0.5 supprimes du repo, integralement absorbes ici. Ajout de l'ADR-013 : posture hybride Flutter (profils Agent, Instance Locale, roles a interface riche) + web leger (profil Portail), en reponse a l'ambition multiplateforme professionnelle (Web, Android, iOS, PC) portee par Dr Amadou -- revise partiellement ADR-008 sans l'annuler, le besoin de zero-installation du Portail restant valide. Debut du developpement : squelette du projet Python et modeles de donnees. |
