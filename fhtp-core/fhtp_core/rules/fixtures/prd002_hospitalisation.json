@@ -1,0 +1,14 @@
+[
+  {
+    "id": "RG-H08",
+    "version": "1.0",
+    "pilier": "COHERENCE_TARIFAIRE",
+    "circuit": ["AMU_SEUL", "AMU_PLUS_PRIVE"],
+    "scenario": ["HOSPITALISATION"],
+    "description": "La delivrance de medicaments injectables en une seule fois ne doit pas depasser 3 jours de traitement sans PEC.",
+    "condition": "medicament.voie_administration == 'PARENTERALE' and medicament.duree_traitement_jours > 3 and medicament.pec_id is None",
+    "action_si_vrai": "REJET",
+    "message_id": "MSG-RG-H08-REJET",
+    "source": "RP 24-30 (FHTP-PRD-002, RG-H08)"
+  }
+]
