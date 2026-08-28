@@ -1,0 +1,50 @@
+[
+  {
+    "id": "R-TG-020",
+    "version": "1.0",
+    "pilier": "COMPLETUDE_ADMINISTRATIVE",
+    "circuit": ["AMU_SEUL", "AMU_PLUS_PRIVE"],
+    "scenario": ["CONSULTATION"],
+    "description": "Maximum 3 echographies obstetricales par grossesse ; au-dela, une PEC prealable est exigee.",
+    "condition": "dossier.nombre_echographies_obstetricales is not None and dossier.nombre_echographies_obstetricales > 3 and dossier.pec_echographie_supplementaire_id is None",
+    "action_si_vrai": "REJET",
+    "message_id": "MSG-R-TG-020-REJET",
+    "source": "RP 24-24 (FHTP-PRD-001, R-TG-020)"
+  },
+  {
+    "id": "RG-P07",
+    "version": "1.0",
+    "pilier": "COHERENCE_TARIFAIRE",
+    "circuit": ["AMU_SEUL", "AMU_PLUS_PRIVE"],
+    "scenario": ["PHARMACIE"],
+    "description": "Substitution generique plus chere que le produit initial sans accord medecin traitant + medecin-conseil.",
+    "condition": "medicament.substituant_dci is not None and medicament.prix_produit_initial is not None and medicament.prix_unitaire_facture > medicament.prix_produit_initial and medicament.pec_id is None",
+    "action_si_vrai": "REJET",
+    "message_id": "MSG-RG-P07-REJET",
+    "source": "RP 24-32 (FHTP-PRD-003, RG-P07)"
+  },
+  {
+    "id": "R-TG-021",
+    "version": "1.0",
+    "pilier": "COHERENCE_PRESCRIPTEUR",
+    "circuit": ["AMU_SEUL", "AMU_PLUS_PRIVE"],
+    "scenario": ["CONSULTATION", "PHARMACIE"],
+    "description": "Interdiction aux prescripteurs paramedicaux de prescrire des molecules de la directive paramedicale 2024 sans PEC.",
+    "condition": "medicament.prescripteur_paramedical == True and medicament.molecule_proscrite_paramedical == True and medicament.pec_id is None",
+    "action_si_vrai": "REJET",
+    "message_id": "MSG-R-TG-021-REJET",
+    "source": "Directive Paramedicaux 2024 (FHTP-PRD-001, R-TG-021 ; FHTP-REF-001 Partie 4.3)"
+  },
+  {
+    "id": "RG-H11",
+    "version": "1.0",
+    "pilier": "COHERENCE_REGIME",
+    "circuit": ["AMU_SEUL", "AMU_PLUS_PRIVE"],
+    "scenario": ["HOSPITALISATION", "CONSULTATION"],
+    "description": "Les cliniques privees ne sont remboursees que pour les medicaments injectables sous AMU ; les medicaments oraux sont exclus.",
+    "condition": "dossier.structure_est_clinique_privee == True and medicament.voie_administration == 'ORALE'",
+    "action_si_vrai": "REJET",
+    "message_id": "MSG-RG-H11-REJET",
+    "source": "RP 24-33 (FHTP-PRD-002, RG-H11 ; FHTP-PRD-001, R-TG-011)"
+  }
+]
