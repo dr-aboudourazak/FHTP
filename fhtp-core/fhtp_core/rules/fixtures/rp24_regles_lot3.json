@@ -1,0 +1,110 @@
+[
+  {
+    "id": "R-TG-016",
+    "version": "1.0",
+    "pilier": "COHERENCE_TARIFAIRE",
+    "circuit": ["AMU_SEUL", "AMU_PLUS_PRIVE"],
+    "scenario": ["CONSULTATION"],
+    "description": "Une visite de controle pour le meme motif, dans le delai reglementaire, doit etre facturee a un tarif nul.",
+    "condition": "acte.visite_controle_meme_motif == True and acte.montant_facture > 0",
+    "action_si_vrai": "REJET",
+    "message_id": "MSG-R-TG-016-REJET",
+    "source": "RP 24-11 (FHTP-PRD-001, R-TG-016 ; FHTP-KNO-001 section 4.2, schema de fraude 7)"
+  },
+  {
+    "id": "R-TG-023",
+    "version": "1.0",
+    "pilier": "COHERENCE_REGIME",
+    "circuit": ["AMU_SEUL", "AMU_PLUS_PRIVE"],
+    "scenario": ["CONSULTATION", "HOSPITALISATION", "PHARMACIE"],
+    "description": "Pour le regime AMU Scolaire, le taux de prise en charge INAM est de 100% -- la part patient doit etre nulle.",
+    "condition": "dossier.beneficiaire_amu_scolaire == True and acte.part_patient is not None and acte.part_patient > 0",
+    "action_si_vrai": "REJET",
+    "message_id": "MSG-R-TG-023-REJET",
+    "source": "Referentiel Scolaire 2024 (FHTP-PRD-001, R-TG-023)"
+  },
+  {
+    "id": "RG-H01",
+    "version": "1.1",
+    "pilier": "COHERENCE_REGIME",
+    "circuit": ["AMU_SEUL", "AMU_PLUS_PRIVE"],
+    "scenario": ["HOSPITALISATION"],
+    "description": "Un acte soumis a PEC realise sans PEC initiale ou complementaire n'est pas rembourse -- sauf admission d'urgence encore dans le delai de grace de regularisation (RG-H07).",
+    "condition": "acte.soumis_pec == True and acte.pec_id is None and (dossier.est_urgence != True or dossier.delai_regularisation_urgence_depasse == True)",
+    "action_si_vrai": "REJET",
+    "message_id": "MSG-RG-H01-REJET",
+    "source": "Confirme par Dr Amadou (FHTP-PRD-002, RG-H01) ; exception d'urgence RP 24-17 / RG-H07"
+  },
+  {
+    "id": "RG-H02",
+    "version": "1.0",
+    "pilier": "COHERENCE_DOCUMENTAIRE",
+    "circuit": ["AMU_SEUL", "AMU_PLUS_PRIVE"],
+    "scenario": ["HOSPITALISATION"],
+    "description": "Une maternite depassant 5 jours doit etre reclassee (medecine/chirurgie) avec justification medicale dans le rapport.",
+    "condition": "dossier.type_hospitalisation == 'MATERNITE' and dossier.duree_sejour_jours is not None and dossier.duree_sejour_jours > 5 and dossier.justification_medicale_presente == False",
+    "action_si_vrai": "REJET",
+    "message_id": "MSG-RG-H02-REJET",
+    "source": "Confirme par Dr Amadou (FHTP-PRD-002, RG-H02)"
+  },
+  {
+    "id": "RG-H03",
+    "version": "1.0",
+    "pilier": "COMPLETUDE_ADMINISTRATIVE",
+    "circuit": ["AMU_SEUL", "AMU_PLUS_PRIVE"],
+    "scenario": ["HOSPITALISATION"],
+    "description": "Le rapport medical de sortie est obligatoire ; son absence bloque le remboursement en secteur prive (tolere en secteur public).",
+    "condition": "dossier.structure_est_clinique_privee == True and dossier.rapport_sortie_present == False",
+    "action_si_vrai": "REJET",
+    "message_id": "MSG-RG-H03-REJET",
+    "source": "Confirme par Dr Amadou / Convention (FHTP-PRD-002, RG-H03)"
+  },
+  {
+    "id": "RG-H05",
+    "version": "1.0",
+    "pilier": "COMPLETUDE_ADMINISTRATIVE",
+    "circuit": ["AMU_SEUL", "AMU_PLUS_PRIVE"],
+    "scenario": ["HOSPITALISATION"],
+    "description": "Le depassement du delai de transmission (30 jours) declenche une alerte administrative, mais pas un rejet automatique.",
+    "condition": "dossier.delai_transmission_hospitalisation_depasse == True",
+    "action_si_vrai": "ATTENTION",
+    "message_id": "MSG-RG-H05-ATTENTION",
+    "source": "Confirme par Dr Amadou (FHTP-PRD-002, RG-H05)"
+  },
+  {
+    "id": "RG-H06",
+    "version": "1.0",
+    "pilier": "COHERENCE_TARIFAIRE",
+    "circuit": ["AMU_SEUL", "AMU_PLUS_PRIVE"],
+    "scenario": ["HOSPITALISATION"],
+    "description": "Le sejour facture est egal a date_sortie - date_entree ; le jour de sortie est exclu du calcul des nuitees.",
+    "condition": "dossier.nombre_nuitees_facturees is not None and dossier.nombre_nuitees_attendues is not None and dossier.nombre_nuitees_facturees > dossier.nombre_nuitees_attendues",
+    "action_si_vrai": "REJET",
+    "message_id": "MSG-RG-H06-REJET",
+    "source": "INAM Art. 31 (FHTP-PRD-002, RG-H06 ; FHTP-KNO-001 section 4.2, schema de fraude 8)"
+  },
+  {
+    "id": "RG-H09",
+    "version": "1.0",
+    "pilier": "COHERENCE_TARIFAIRE",
+    "circuit": ["AMU_SEUL", "AMU_PLUS_PRIVE"],
+    "scenario": ["HOSPITALISATION"],
+    "description": "L'hopital de jour doit etre facture en mise en observation, limitee a 3 jours maximum.",
+    "condition": "dossier.type_hospitalisation == 'MISE_EN_OBSERVATION' and dossier.duree_sejour_jours is not None and dossier.duree_sejour_jours > 3",
+    "action_si_vrai": "REJET",
+    "message_id": "MSG-RG-H09-REJET",
+    "source": "RP 24-16 (FHTP-PRD-002, RG-H09)"
+  },
+  {
+    "id": "RG-P11",
+    "version": "1.0",
+    "pilier": "COHERENCE_TARIFAIRE",
+    "circuit": ["AMU_SEUL", "AMU_PLUS_PRIVE"],
+    "scenario": ["PHARMACIE"],
+    "description": "Si le prix public de cession en pharmacie est inferieur au tarif AMU, facturer au prix public le plus bas.",
+    "condition": "medicament.prix_public_pharmacie is not None and medicament.prix_reference_presta_plus is not None and medicament.prix_public_pharmacie < medicament.prix_reference_presta_plus and medicament.prix_unitaire_facture > medicament.prix_public_pharmacie",
+    "action_si_vrai": "REJET",
+    "message_id": "MSG-RG-P11-REJET",
+    "source": "RP 24-34 (FHTP-PRD-003, RG-P11)"
+  }
+]

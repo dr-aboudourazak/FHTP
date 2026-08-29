@@ -1,0 +1,62 @@
+[
+  {
+    "id": "R-TG-017",
+    "version": "1.0",
+    "pilier": "COHERENCE_DOCUMENTAIRE",
+    "circuit": ["AMU_SEUL", "AMU_PLUS_PRIVE", "PRIVE_SEUL", "DIRECT"],
+    "scenario": ["CONSULTATION", "HOSPITALISATION", "PHARMACIE"],
+    "description": "Le code CIM-10 R68 est interdit au remboursement.",
+    "condition": "acte.diagnostic_cim10 == 'R68'",
+    "action_si_vrai": "REJET",
+    "message_id": "MSG-R-TG-017-REJET",
+    "source": "Note Circulaire R68 / RP 24-10 (FHTP-PRD-001, R-TG-017)"
+  },
+  {
+    "id": "R-TG-022",
+    "version": "1.0",
+    "pilier": "COHERENCE_DOCUMENTAIRE",
+    "circuit": ["AMU_SEUL", "AMU_PLUS_PRIVE", "PRIVE_SEUL", "DIRECT"],
+    "scenario": ["CONSULTATION", "HOSPITALISATION", "PHARMACIE"],
+    "description": "Toute prescription doit etre close par trois traits obliques (///).",
+    "condition": "dossier.cloture_triple_trait == False",
+    "action_si_vrai": "ATTENTION",
+    "message_id": "MSG-R-TG-022-ATTENTION",
+    "source": "RP 24-03 (FHTP-PRD-001, R-TG-022)"
+  },
+  {
+    "id": "R-TG-005",
+    "version": "1.0",
+    "pilier": "COHERENCE_TARIFAIRE",
+    "circuit": ["AMU_SEUL", "AMU_PLUS_PRIVE"],
+    "scenario": ["CONSULTATION", "HOSPITALISATION", "PHARMACIE"],
+    "description": "Le tarif d'un medicament ne peut pas depasser le prix de reference Presta+.",
+    "condition": "medicament.enrole_presta_plus == True and medicament.prix_reference_presta_plus is not None and medicament.prix_unitaire_facture > medicament.prix_reference_presta_plus",
+    "action_si_vrai": "ATTENTION",
+    "message_id": "MSG-R-TG-005-ATTENTION",
+    "source": "Convention INAM art. 29 (FHTP-PRD-001, R-TG-005)"
+  },
+  {
+    "id": "R-TG-015",
+    "version": "1.0",
+    "pilier": "COHERENCE_TARIFAIRE",
+    "circuit": ["AMU_SEUL", "AMU_PLUS_PRIVE"],
+    "scenario": ["CONSULTATION", "PHARMACIE"],
+    "description": "Une prescription ambulatoire de plus de 15 jours exige une entente prealable (PEC).",
+    "condition": "medicament.duree_traitement_jours > 15 and medicament.pec_id is None",
+    "action_si_vrai": "REJET",
+    "message_id": "MSG-R-TG-015-REJET",
+    "source": "RP 24-31 / INAM Art. 15 (FHTP-PRD-001, R-TG-015 ; FHTP-PRD-003, RG-P12)"
+  },
+  {
+    "id": "R-TG-014",
+    "version": "1.0",
+    "pilier": "COHERENCE_DOCUMENTAIRE",
+    "circuit": ["AMU_SEUL", "AMU_PLUS_PRIVE", "PRIVE_SEUL"],
+    "scenario": ["PHARMACIE"],
+    "description": "Une ordonnance a une validite maximale de 7 jours pour etre honoree en pharmacie.",
+    "condition": "medicament.jours_depuis_prescription is not None and medicament.jours_depuis_prescription > 7",
+    "action_si_vrai": "REJET",
+    "message_id": "MSG-R-TG-014-REJET",
+    "source": "RP 24-37 / CAT Art. 14 (FHTP-PRD-001, R-TG-014 ; FHTP-PRD-003, RG-P06)"
+  }
+]
