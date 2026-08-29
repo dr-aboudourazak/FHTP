@@ -1,0 +1,38 @@
+[
+  {
+    "id": "RP24-18",
+    "version": "1.0",
+    "pilier": "COHERENCE_PRESCRIPTEUR",
+    "circuit": ["AMU_SEUL", "AMU_PLUS_PRIVE"],
+    "scenario": ["CONSULTATION"],
+    "description": "La demande de TPC (affection longue duree/chronique) est reservee aux medecins.",
+    "condition": "dossier.demande_tpc == True and acte.prescripteur_est_medecin == False",
+    "action_si_vrai": "REJET",
+    "message_id": "MSG-RP24-18-REJET",
+    "source": "RP 24-18"
+  },
+  {
+    "id": "RP24-19",
+    "version": "1.0",
+    "pilier": "COMPLETUDE_ADMINISTRATIVE",
+    "circuit": ["AMU_SEUL", "AMU_PLUS_PRIVE"],
+    "scenario": ["PHARMACIE"],
+    "description": "La delivrance de medicaments TPC requiert l'attestation TPC correspondante.",
+    "condition": "medicament.necessite_tpc == True and medicament.pec_id is None",
+    "action_si_vrai": "REJET",
+    "message_id": "MSG-RP24-19-REJET",
+    "source": "RP 24-19"
+  },
+  {
+    "id": "RP24-21",
+    "version": "1.0",
+    "pilier": "COHERENCE_PRESCRIPTEUR",
+    "circuit": ["AMU_SEUL", "AMU_PLUS_PRIVE"],
+    "scenario": ["CONSULTATION"],
+    "description": "La reeducation fonctionnelle (kinesitherapie) et les appareillages orthopediques requierent une prescription medicale.",
+    "condition": "acte.necessite_prescription_medicale == True and acte.prescripteur_est_medecin == False",
+    "action_si_vrai": "REJET",
+    "message_id": "MSG-RP24-21-REJET",
+    "source": "RP 24-21"
+  }
+]
